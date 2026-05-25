@@ -142,6 +142,16 @@ export default function CashCycle() {
 
   _simplifiedDisplay = simplifiedDisplay;
 
+  useEffect(() => {
+    if (!autoMarkPaid) return;
+    const today = todayISO();
+    setTxns(p => p.map(tx =>
+      tx.type === "expense" && tx.date < today && tx.status !== "paid"
+        ? { ...tx, status: "paid" }
+        : tx
+    ));
+  }, [autoMarkPaid]);
+
   const acc = accounts.find((a) => a.id === activeAccount);
   const accTxns = txns.filter((x) => x.account === activeAccount);
 
@@ -206,7 +216,8 @@ export default function CashCycle() {
       {view === "calendar" && (
         <Calendar dayMap={dayMap} forecast={forecast} end={end}
           onTapTx={(tx) => { setEditing(tx); setSheet(true); }}
-          onEditWarnings={() => setShowWarnings(true)} />
+          onEditWarnings={() => setShowWarnings(true)}
+          showProjectedBalances={showProjectedBalances} />
       )}
       {view === "stats" && (
         <BudgetView
@@ -233,7 +244,8 @@ export default function CashCycle() {
       )}
       {view === "profile" && (
         <ProfileView accounts={accounts} txns={txns} activeAccount={activeAccount}
-          onBack={() => setView("calendar")} dm={darkMode} />
+          onBack={() => setView("calendar")} dm={darkMode}
+          onResetData={() => { setTxns([]); setDebts([]); setAssigned({}); setBudgeted(0); }} />
       )}
       {view === "settings" && (
         <SettingsView
@@ -249,6 +261,7 @@ export default function CashCycle() {
           reminderTime={reminderTime} setReminderTime={setReminderTime}
           autoMarkPaid={autoMarkPaid} setAutoMarkPaid={setAutoMarkPaid}
           onResetData={() => { setTxns([]); setDebts([]); setAssigned({}); setBudgeted(0); }}
+          onManageCategories={() => setView("stats")}
           onBack={() => setView("calendar")} />
       )}
 
@@ -320,7 +333,7 @@ export default function CashCycle() {
             </div>
           </div>
         )}
-        <div style={S.toolbar}>
+        <div style={S.toolbar} className="cc-toolbar-pill">
           <TBtn active={view === "calendar"} onClick={() => setView("calendar")}>🗓️</TBtn>
           <TBtn active={view === "stats"} onClick={() => setView("stats")}>📈</TBtn>
           <button style={{ ...S.plus, transform: addMenu ? "rotate(45deg)" : "rotate(0)" }}
@@ -569,7 +582,7 @@ function Insights({ accounts, accTxns, dayMap, balance, onClose }) {
   );
 }
 
-function Calendar({ dayMap, forecast, end, onTapTx, onEditWarnings }) {
+function Calendar({ dayMap, forecast, end, onTapTx, onEditWarnings, showProjectedBalances = true }) {
   const scrollRef = useRef(null);
 
   const weeks = useMemo(() => {
@@ -608,11 +621,11 @@ function Calendar({ dayMap, forecast, end, onTapTx, onEditWarnings }) {
       </div>
 
       <div style={S.dowRow}>
-        {DOW.map((d) => <div key={d} style={S.dowCell}>{d}</div>)}
+        {DOW.map((d) => <div key={d} style={S.dowCell} className="cc-dow-cell">{d}</div>)}
       </div>
 
       <div style={{ position: "relative", height: 0 }}>
-        <div style={S.monthChip}>{monthLabel} ⌄</div>
+        <div style={S.monthChip} className="cc-month-chip">{monthLabel} ⌄</div>
       </div>
 
       <div ref={scrollRef} onScroll={onScroll} className="cc-cal" style={S.calScroll}>
@@ -636,7 +649,7 @@ function Calendar({ dayMap, forecast, end, onTapTx, onEditWarnings }) {
                       </span>
                     )}
                   </div>
-                  {info?.changed && !isPast && <div style={S.balPill}>{fmtK(info.balance)}</div>}
+                  {info?.changed && !isPast && showProjectedBalances && <div style={S.balPill} className="cc-bal-pill">{fmtK(info.balance)}</div>}
                   {info?.txs?.map((tx) => {
                     const t = tintFor(tx);
                     const m = catMeta(tx.category);
@@ -2085,7 +2098,7 @@ function Toggle({ on, onChange }) {
   return (
     <button onClick={() => onChange(!on)} style={{
       width: 52, height: 31, borderRadius: 31, border: "none", cursor: "pointer",
-      background: on ? "#30d158" : "#c7c7cc", position: "relative", transition: "background .2s", padding: 0,
+      background: on ? "var(--ac, #0a84ff)" : "#c7c7cc", position: "relative", transition: "background .2s", padding: 0, flexShrink: 0,
     }}>
       <span style={{ position: "absolute", top: 2, left: on ? 23 : 2, width: 27, height: 27,
         borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,.3)" }} />
@@ -2095,7 +2108,7 @@ function Toggle({ on, onChange }) {
 
 // ============================================================================
 const IconBtn = ({ children, onClick }) => (
-  <button onClick={onClick} style={S.iconBtn}>{children}</button>
+  <button onClick={onClick} style={S.iconBtn} className="cc-icon-btn">{children}</button>
 );
 const TBtn = ({ children, active, onClick }) => (
   <button onClick={onClick} style={{ ...S.tbtn, opacity: active ? 1 : 0.55 }}>{children}</button>
@@ -2291,6 +2304,11 @@ const CSS = `
   .dm .cc-dm-muted { color: #8e8e93 !important; }
   .dm .cc-dm-border { border-color: #3a3a3c !important; }
   .dm .cc-dm-divider { border-bottom-color: #3a3a3c !important; }
+  .dm .cc-icon-btn { background: #2c2c2e !important; color: #f2f2f7 !important; }
+  .dm .cc-toolbar-pill { background: rgba(28,28,30,.95) !important; }
+  .dm .cc-bal-pill { background: #2c2c2e !important; color: #aeaeb2 !important; }
+  .dm .cc-month-chip { background: #1c1c1e !important; color: #f2f2f7 !important; box-shadow: 0 2px 10px rgba(0,0,0,.5) !important; }
+  .dm .cc-dow-cell { color: #636366 !important; }
 `;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -2338,17 +2356,17 @@ function SideMenu({ dm, darkMode, setDarkMode, onClose, onNavigate }) {
 
           {/* Nav items */}
           {items.map(item => (
-            <button key={item.key}
-              onClick={() => onNavigate(item.key)}
-              style={{ display:"flex", alignItems:"center", gap:16, width:"100%",
-                       padding:"18px 24px", background:"transparent",
-                       borderBottom:`0.5px solid ${t.border}`,
-                       border:"none", borderTop:"none",
-                       cursor:"pointer", color: t.text, textAlign:"left" }}>
-              <span style={{ fontSize:22 }}>{item.icon}</span>
-              <span style={{ fontSize:17, fontWeight:600, flex:1 }}>{item.label}</span>
-              <span style={{ color: t.text2, fontSize:22 }}>›</span>
-            </button>
+            <div key={item.key} style={{ borderBottom:`0.5px solid ${t.border}` }}>
+              <button
+                onClick={() => onNavigate(item.key)}
+                style={{ display:"flex", alignItems:"center", gap:16, width:"100%",
+                         padding:"18px 24px", background:"transparent",
+                         border:"none", cursor:"pointer", color: t.text, textAlign:"left" }}>
+                <span style={{ fontSize:22 }}>{item.icon}</span>
+                <span style={{ fontSize:17, fontWeight:600, flex:1 }}>{item.label}</span>
+                <span style={{ color: t.text2, fontSize:22 }}>›</span>
+              </button>
+            </div>
           ))}
         </div>
       </div>
@@ -2452,65 +2470,188 @@ function ForecastView({ accounts, accTxns, dayMap, balance, onBack, dm }) {
 }
 
 // ── ProfileView ───────────────────────────────────────────────────────────────
-function ProfileView({ accounts, txns, activeAccount, onBack, dm }) {
+const PROFILE_ID = "cc_" + Math.random().toString(36).slice(2, 10).toUpperCase();
+
+function ProfileView({ accounts, txns, onBack, dm, onResetData }) {
   const t = th(dm);
-  const [name, setName] = useState("User");
-  const [editing, setEditing] = useState(false);
-  const totalBalance = accounts.reduce((s,a)=>s+a.balance,0);
-  const totalIncome  = txns.filter(x=>x.type==="income" ).reduce((s,x)=>s+x.amount,0);
-  const totalExpense = txns.filter(x=>x.type==="expense").reduce((s,x)=>s+x.amount,0);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [logoutConfirm, setLogoutConfirm] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+
+  const PRow = ({ icon, label, right, last, onClick, red }) => (
+    <div onClick={onClick} style={{ display:"flex", alignItems:"center", gap:14, padding:"16px 18px",
+                borderBottom: last ? "none" : `0.5px solid ${t.border}`,
+                cursor: onClick ? "pointer" : "default", background:t.bg2 }}>
+      <span style={{ fontSize:20, width:24, textAlign:"center", color: red ? "#ff453a" : t.text2 }}>{icon}</span>
+      <span style={{ flex:1, fontSize:16, fontWeight:600, color: red ? "#ff453a" : t.text }}>{label}</span>
+      {right && <span style={{ color:t.text2 }}>{right}</span>}
+    </div>
+  );
+
+  if (showTerms) return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:t.bg }}>
+      <div style={{ display:"flex", alignItems:"center", padding:"8px 16px 6px" }}>
+        <button onClick={()=>setShowTerms(false)} style={{ ...S.iconBtn, background:t.bg3, color:t.text }}>‹</button>
+        <div style={{ flex:1, textAlign:"center", fontSize:20, fontWeight:800, color:t.text }}>Terms of Use</div>
+        <div style={{ width:40 }} />
+      </div>
+      <div style={{ ...S.bodyScroll, background:t.bg }} className="cc-cal">
+        <div style={{ padding:"16px 4px", color:t.text2, fontSize:15, lineHeight:1.7 }}>
+          <p><b style={{ color:t.text }}>1. Acceptance</b><br/>By using Cash Cycle, you agree to these terms. If you do not agree, please do not use the app.</p>
+          <p><b style={{ color:t.text }}>2. Use of the App</b><br/>Cash Cycle is provided for personal financial tracking. You agree not to misuse the service or access it in an unauthorized manner.</p>
+          <p><b style={{ color:t.text }}>3. Data</b><br/>All financial data is stored locally on your device. We do not collect or sell your personal financial information.</p>
+          <p><b style={{ color:t.text }}>4. Disclaimer</b><br/>Cash Cycle is a budgeting tool and does not provide financial advice. Always consult a qualified financial advisor for investment decisions.</p>
+          <p><b style={{ color:t.text }}>5. Changes</b><br/>We may update these terms at any time. Continued use of the app constitutes acceptance of the updated terms.</p>
+        </div>
+        <div style={{ height:80 }} />
+      </div>
+    </div>
+  );
+
+  if (showPrivacy) return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:t.bg }}>
+      <div style={{ display:"flex", alignItems:"center", padding:"8px 16px 6px" }}>
+        <button onClick={()=>setShowPrivacy(false)} style={{ ...S.iconBtn, background:t.bg3, color:t.text }}>‹</button>
+        <div style={{ flex:1, textAlign:"center", fontSize:20, fontWeight:800, color:t.text }}>Privacy Policy</div>
+        <div style={{ width:40 }} />
+      </div>
+      <div style={{ ...S.bodyScroll, background:t.bg }} className="cc-cal">
+        <div style={{ padding:"16px 4px", color:t.text2, fontSize:15, lineHeight:1.7 }}>
+          <p><b style={{ color:t.text }}>Data Storage</b><br/>All your financial data is stored locally on your device using browser storage. We do not transmit your data to any servers.</p>
+          <p><b style={{ color:t.text }}>No Tracking</b><br/>We do not use analytics, tracking pixels, or third-party cookies. Your usage patterns are never monitored or sold.</p>
+          <p><b style={{ color:t.text }}>Permissions</b><br/>The app may request notification permissions to send you reminders about bills and forecasts. These are optional.</p>
+          <p><b style={{ color:t.text }}>Data Deletion</b><br/>You can delete all your data at any time using the "Reset & Start Fresh" option in Settings, or "Delete Account" in Profile.</p>
+          <p><b style={{ color:t.text }}>Contact</b><br/>For privacy questions, contact us at support@cashcycle.app</p>
+        </div>
+        <div style={{ height:80 }} />
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:t.bg }}>
       <div style={{ display:"flex", alignItems:"center", padding:"8px 16px 6px" }}>
         <button onClick={onBack} style={{ ...S.iconBtn, background:t.bg3, color:t.text }}>‹</button>
         <div style={{ flex:1, textAlign:"center", fontSize:22, fontWeight:800, color:t.text }}>Profile</div>
-        <button onClick={()=>setEditing(!editing)}
-          style={{ border:"none", background:"transparent", color:"var(--ac,#0a84ff)", fontSize:15, fontWeight:700, cursor:"pointer" }}>
-          {editing?"Done":"Edit"}
-        </button>
+        <div style={{ width:40 }} />
       </div>
-      <div style={{ ...S.bodyScroll, background:t.bg }} className="cc-cal">
-        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"24px 0 28px" }}>
-          <div style={{ width:80, height:80, borderRadius:40, background:"var(--ac,#0a84ff)",
-                        display:"flex", alignItems:"center", justifyContent:"center", fontSize:36, marginBottom:14 }}>👤</div>
-          {editing ? (
-            <input value={name} onChange={e=>setName(e.target.value)}
-              style={{ fontSize:24, fontWeight:800, textAlign:"center", border:"none",
-                       borderBottom:`2px solid var(--ac,#0a84ff)`, outline:"none",
-                       background:"transparent", color:t.text, width:200 }} />
-          ) : (
-            <div style={{ fontSize:24, fontWeight:800, color:t.text }}>{name}</div>
-          )}
-          <div style={{ fontSize:14, color:t.text2, marginTop:4 }}>Cash Cycle Member</div>
-        </div>
 
-        <div style={{ background:t.bg2, borderRadius:16, padding:14, marginBottom:16 }}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:1 }}>
-            {[["Net Worth",fmtK(totalBalance),"var(--ac,#0a84ff)"],
-              ["Transactions",txns.length,t.text],
-              ["Total Income",fmtK(totalIncome),"#30d158"],
-              ["Total Spent",fmtK(totalExpense),"#ff453a"]].map(([lbl,val,col])=>(
-              <div key={lbl} style={{ padding:"14px 10px", textAlign:"center" }}>
-                <div style={{ fontSize:22, fontWeight:800, color:col }}>{val}</div>
-                <div style={{ fontSize:12, color:t.text2, fontWeight:600, marginTop:4 }}>{lbl}</div>
-              </div>
-            ))}
+      <div style={{ ...S.bodyScroll, background:t.bg }} className="cc-cal">
+        {/* Avatar + name */}
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"20px 0 22px" }}>
+          <div style={{ width:72, height:72, borderRadius:36, background:"var(--ac,#0a84ff)",
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        fontSize:32, fontWeight:800, color:"#fff", marginBottom:12 }}>R</div>
+          <div style={{ fontSize:20, fontWeight:700, color:t.text }}>Guest User</div>
+          <div style={{ fontSize:13, color:t.text2, marginTop:4, display:"flex", alignItems:"center", gap:6 }}>
+            <span>ID: {PROFILE_ID}...</span>
+            <button onClick={()=>navigator.clipboard?.writeText(PROFILE_ID)}
+              style={{ border:"none", background:"transparent", cursor:"pointer", fontSize:14, color:t.text2, padding:0 }}>📋</button>
+          </div>
+          <div style={{ marginTop:8, display:"flex", alignItems:"center", gap:6,
+                        background:t.bg3, borderRadius:20, padding:"4px 12px", fontSize:13, fontWeight:600, color:t.text }}>
+            🇺🇸 US
           </div>
         </div>
 
-        <div style={{ fontSize:22, fontWeight:800, margin:"10px 4px 10px", color:t.text }}>Accounts</div>
-        <div style={{ background:t.bg2, borderRadius:16, padding:14 }}>
-          {accounts.map((a,i)=>(
-            <div key={a.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 4px",
-                                     borderBottom: i<accounts.length-1 ? `0.5px solid ${t.border}` : "none" }}>
-              <span style={{ width:12, height:12, borderRadius:6, background:a.color, flexShrink:0 }} />
-              <span style={{ flex:1, fontWeight:600, fontSize:16, color:t.text }}>{a.name}</span>
-              <span style={{ fontWeight:800, fontSize:16, color: a.balance>=0 ? t.text : "#ff453a" }}>{fmtFull(a.balance)}</span>
+        {/* Stats row */}
+        <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+          {[["Status","Free",t.text],["Trial","30d\nsubscribed","var(--ac,#0a84ff)"],["Plan","From\n$6.7/mo",t.text]].map(([lbl,val,col])=>(
+            <div key={lbl} style={{ flex:1, background:t.bg2, borderRadius:14, padding:"14px 8px", textAlign:"center" }}>
+              <div style={{ fontSize:12, color:t.text2, fontWeight:600, marginBottom:6 }}>{lbl}</div>
+              {val.split("\n").map((v,i)=>(
+                <div key={i} style={{ fontSize: i===0 ? 18 : 12, fontWeight: i===0 ? 800 : 500, color: i===0 ? col : t.text2, lineHeight:1.2 }}>{v}</div>
+              ))}
             </div>
           ))}
         </div>
-        <div style={{ height:120 }} />
+
+        {/* Premium Features */}
+        <div style={{ background:t.bg2, borderRadius:16, padding:"16px 18px", marginBottom:16 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+            <span style={{ color:"#ff9f0a", fontSize:18 }}>★</span>
+            <span style={{ fontSize:16, fontWeight:800, color:t.text }}>Premium Features</span>
+          </div>
+          {[
+            "Track unlimited expenses, income, and bank balances",
+            "See projected balances on future dates",
+            "Get smart reminders for upcoming bills",
+            "Gain full financial visibility with no limits",
+          ].map(f=>(
+            <div key={f} style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:8 }}>
+              <span style={{ color:"var(--ac,#0a84ff)", fontSize:16, marginTop:1 }}>✓</span>
+              <span style={{ fontSize:14, color:t.text2, flex:1, lineHeight:1.4 }}>{f}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Subscribe */}
+        <button style={{ width:"100%", padding:"16px", borderRadius:14, border:"none",
+                         background:"var(--ac,#0a84ff)", color:"#fff", fontSize:17, fontWeight:800,
+                         cursor:"pointer", marginBottom:10, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+          💎 Subscribe
+        </button>
+        <button style={{ width:"100%", padding:"14px", borderRadius:14, border:`1.5px solid ${t.border}`,
+                         background:"transparent", color:t.text, fontSize:16, fontWeight:700,
+                         cursor:"pointer", marginBottom:20, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+          👤 Create an Account
+        </button>
+
+        {/* Info rows */}
+        <div style={{ borderRadius:16, overflow:"hidden", marginBottom:16 }}>
+          <PRow icon="📄" label="Terms of Use" right="›" onClick={()=>setShowTerms(true)} />
+          <PRow icon="🛡️" label="Privacy Policy" right="›" onClick={()=>setShowPrivacy(true)} />
+          <PRow icon="ℹ️" label="Version" right="1.0.0" />
+          <PRow icon="☁️" label="Last update" right="today" last />
+        </div>
+
+        {/* Log Out */}
+        {!logoutConfirm ? (
+          <div style={{ background:t.bg2, borderRadius:16, padding:"16px", textAlign:"center",
+                        cursor:"pointer", marginBottom:10, display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}
+               onClick={()=>setLogoutConfirm(true)}>
+            <span style={{ fontSize:18 }}>↪</span>
+            <span style={{ fontSize:16, fontWeight:700, color:t.text }}>Log Out</span>
+          </div>
+        ) : (
+          <div style={{ background:t.bg2, borderRadius:16, padding:16, marginBottom:10 }}>
+            <div style={{ fontSize:14, color:t.text2, textAlign:"center", marginBottom:12 }}>Log out of your account?</div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={()=>setLogoutConfirm(false)}
+                style={{ flex:1, padding:12, borderRadius:12, border:`1px solid ${t.border}`,
+                         background:"transparent", color:t.text, fontWeight:700, cursor:"pointer" }}>Cancel</button>
+              <button onClick={()=>{ onResetData?.(); setLogoutConfirm(false); onBack(); }}
+                style={{ flex:1, padding:12, borderRadius:12, border:"none",
+                         background:"var(--ac,#0a84ff)", color:"#fff", fontWeight:800, cursor:"pointer" }}>Log Out</button>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Account */}
+        {!deleteConfirm ? (
+          <div style={{ background:t.bg2, borderRadius:16, padding:"16px", textAlign:"center",
+                        cursor:"pointer", marginBottom:20, display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}
+               onClick={()=>setDeleteConfirm(true)}>
+            <span style={{ fontSize:18, color:"#ff453a" }}>🗑️</span>
+            <span style={{ fontSize:16, fontWeight:700, color:"#ff453a" }}>Delete Account</span>
+          </div>
+        ) : (
+          <div style={{ background:t.bg2, borderRadius:16, padding:16, marginBottom:20 }}>
+            <div style={{ fontSize:14, color:t.text2, textAlign:"center", marginBottom:12, lineHeight:1.5 }}>
+              This will permanently delete all your data. This cannot be undone.
+            </div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={()=>setDeleteConfirm(false)}
+                style={{ flex:1, padding:12, borderRadius:12, border:`1px solid ${t.border}`,
+                         background:"transparent", color:t.text, fontWeight:700, cursor:"pointer" }}>Cancel</button>
+              <button onClick={()=>{ onResetData?.(); setDeleteConfirm(false); onBack(); }}
+                style={{ flex:1, padding:12, borderRadius:12, border:"none",
+                         background:"#ff453a", color:"#fff", fontWeight:800, cursor:"pointer" }}>Delete</button>
+            </div>
+          </div>
+        )}
+        <div style={{ height:100 }} />
       </div>
     </div>
   );
@@ -2526,7 +2667,7 @@ function SettingsView({
   morningForecast, setMorningForecast, morningTime, setMorningTime,
   eveningForecast, setEveningForecast, eveningTime, setEveningTime,
   paymentReminders, setPaymentReminders, reminderTime, setReminderTime,
-  autoMarkPaid, setAutoMarkPaid, onResetData, onBack,
+  autoMarkPaid, setAutoMarkPaid, onResetData, onManageCategories, onBack,
 }) {
   const t = th(dm);
   const [resetConfirm, setResetConfirm] = useState(false);
@@ -2538,9 +2679,10 @@ function SettingsView({
   const Card = ({ children }) => (
     <div style={{ background:t.bg2, borderRadius:16, overflow:"hidden" }}>{children}</div>
   );
-  const Row = ({ icon, label, sub, right, last }) => (
-    <div style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 16px",
-                  borderBottom: last ? "none" : `0.5px solid ${t.border}` }}>
+  const Row = ({ icon, label, sub, right, last, onClick }) => (
+    <div onClick={onClick} style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 16px",
+                  borderBottom: last ? "none" : `0.5px solid ${t.border}`,
+                  cursor: onClick ? "pointer" : "default" }}>
       {icon && <span style={{ fontSize:20, width:24, textAlign:"center" }}>{icon}</span>}
       <div style={{ flex:1 }}>
         <div style={{ fontSize:16, fontWeight:600, color:t.text }}>{label}</div>
@@ -2639,7 +2781,8 @@ function SettingsView({
         <Card>
           <Row icon="✏️" label="Manage Categories"
             sub="Customize budget categories, emojis, and colors"
-            right={<span style={{ color:t.text2, fontSize:20 }}>›</span>} />
+            onClick={onManageCategories}
+            right={<span style={{ color:"var(--ac,#0a84ff)", fontSize:20 }}>›</span>} />
           <Row icon="⊞" label="Widget Quick Add" last
             sub="Pick 3 categories to pin on your home screen widget"
             right={<span style={{ color:t.text2, fontSize:20 }}>›</span>} />
@@ -2659,6 +2802,7 @@ function SettingsView({
           {!resetConfirm ? (
             <Row icon="↺" label="Reset & Start Fresh"
               sub="Clear all financial data and bank connections. Your account and preferences will be preserved."
+              onClick={() => setResetConfirm(true)}
               last right={<span style={{ color:"#ff453a", fontSize:20 }}>›</span>} />
           ) : (
             <div style={{ padding:16 }}>
@@ -2680,12 +2824,8 @@ function SettingsView({
             </div>
           )}
         </Card>
-        {!resetConfirm && (
-          <div style={{ marginTop:-16, cursor:"pointer", height:60 }}
-               onClick={()=>setResetConfirm(true)} />
-        )}
-        <div style={{ fontSize:13, color:t.text2, textAlign:"center", margin:"18px 0 8px", lineHeight:1.5 }}>
-          This will clear all transactions, budgets, and accounts.{"\n"}Display preferences will be preserved. This action cannot be undone.
+        <div style={{ fontSize:13, color:t.text2, textAlign:"center", margin:"14px 0 8px", lineHeight:1.5 }}>
+          This will clear all transactions, budgets, and accounts. Display preferences will be preserved. This action cannot be undone.
         </div>
 
         <div style={{ height:120 }} />
