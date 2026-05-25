@@ -2567,31 +2567,19 @@ function ProfileView({ accounts, txns, onBack, dm, onResetData }) {
           ))}
         </div>
 
-        {/* Premium Features */}
-        <div style={{ background:t.bg2, borderRadius:16, padding:"16px 18px", marginBottom:16 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
-            <span style={{ color:"#ff9f0a", fontSize:18 }}>★</span>
-            <span style={{ fontSize:16, fontWeight:800, color:t.text }}>Premium Features</span>
+        {/* Premium Features — Coming Soon */}
+        <div style={{ background:t.bg2, borderRadius:16, padding:"20px 18px", marginBottom:16, textAlign:"center" }}>
+          <div style={{ fontSize:32, marginBottom:8 }}>🚀</div>
+          <div style={{ fontSize:17, fontWeight:800, color:t.text, marginBottom:6 }}>Premium Features</div>
+          <div style={{ display:"inline-block", background:"var(--ac,#0a84ff)", color:"#fff",
+                        borderRadius:20, padding:"4px 14px", fontSize:13, fontWeight:700, marginBottom:12 }}>
+            Coming Soon
           </div>
-          {[
-            "Track unlimited expenses, income, and bank balances",
-            "See projected balances on future dates",
-            "Get smart reminders for upcoming bills",
-            "Gain full financial visibility with no limits",
-          ].map(f=>(
-            <div key={f} style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:8 }}>
-              <span style={{ color:"var(--ac,#0a84ff)", fontSize:16, marginTop:1 }}>✓</span>
-              <span style={{ fontSize:14, color:t.text2, flex:1, lineHeight:1.4 }}>{f}</span>
-            </div>
-          ))}
+          <div style={{ fontSize:14, color:t.text2, lineHeight:1.6 }}>
+            Subscriptions are on their way. Stay tuned for unlimited tracking, smart reminders, and full financial visibility.
+          </div>
         </div>
 
-        {/* Subscribe */}
-        <button style={{ width:"100%", padding:"16px", borderRadius:14, border:"none",
-                         background:"var(--ac,#0a84ff)", color:"#fff", fontSize:17, fontWeight:800,
-                         cursor:"pointer", marginBottom:10, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-          💎 Subscribe
-        </button>
         <button style={{ width:"100%", padding:"14px", borderRadius:14, border:`1.5px solid ${t.border}`,
                          background:"transparent", color:t.text, fontSize:16, fontWeight:700,
                          cursor:"pointer", marginBottom:20, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
