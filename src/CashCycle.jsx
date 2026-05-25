@@ -15,14 +15,19 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const dISO = (d) => d.toISOString().slice(0, 10);
 
+let _simplifiedDisplay = false;
+
 const fmtK = (n) => {
+  if (_simplifiedDisplay) n = Math.round(n);
   const a = Math.abs(n);
   const s = n < 0 ? "-" : "";
   if (a >= 1000) return s + "$" + (a / 1000).toFixed(1).replace(/\.0$/, "") + "k";
   return s + "$" + Math.round(a);
 };
-const fmtFull = (n) =>
-  (n < 0 ? "-" : "") + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtFull = (n) => {
+  if (_simplifiedDisplay) return (n < 0 ? "-" : "") + "$" + Math.abs(Math.round(n)).toLocaleString("en-US");
+  return (n < 0 ? "-" : "") + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -122,6 +127,20 @@ export default function CashCycle() {
   const [thresholds, setThresholds] = useState({ clear: 500, partly: 300, rain: 100, storm: 0 });
   const [showWarnings, setShowWarnings] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [accentColor, setAccentColor] = useState("#0a84ff");
+  const [simplifiedDisplay, setSimplifiedDisplay] = useState(false);
+  const [showProjectedBalances, setShowProjectedBalances] = useState(true);
+  const [morningForecast, setMorningForecast] = useState(true);
+  const [morningTime, setMorningTime] = useState("08:00");
+  const [eveningForecast, setEveningForecast] = useState(true);
+  const [eveningTime, setEveningTime] = useState("18:00");
+  const [paymentReminders, setPaymentReminders] = useState(true);
+  const [reminderTime, setReminderTime] = useState("18:00");
+  const [autoMarkPaid, setAutoMarkPaid] = useState(false);
+
+  _simplifiedDisplay = simplifiedDisplay;
 
   const acc = accounts.find((a) => a.id === activeAccount);
   const accTxns = txns.filter((x) => x.account === activeAccount);
@@ -166,12 +185,12 @@ export default function CashCycle() {
   function delTx(id) { setTxns((p) => p.filter((x) => x.id !== id)); setSheet(false); setEditing(null); }
 
   return (
-    <div style={S.root}>
+    <div style={{ ...S.root, "--ac": accentColor }} className={darkMode ? "dm" : ""}>
       <style>{CSS}</style>
 
       <div style={S.header}>
         <div style={{ display: "flex", gap: 8 }}>
-          <IconBtn onClick={() => setView("accounts")}>☰</IconBtn>
+          <IconBtn onClick={() => setMenuOpen(true)}>☰</IconBtn>
           <IconBtn>💬</IconBtn>
         </div>
         <div style={{ textAlign: "center" }}>
@@ -207,6 +226,39 @@ export default function CashCycle() {
       {view === "debts" && (
         <Debts debts={debts} addDebt={addDebt} removeDebt={removeDebt}
           accounts={accounts} setAccounts={setAccounts} />
+      )}
+      {view === "forecast" && (
+        <ForecastView accounts={accounts} accTxns={accTxns} dayMap={dayMap}
+          balance={acc?.balance ?? 0} onBack={() => setView("calendar")} dm={darkMode} />
+      )}
+      {view === "profile" && (
+        <ProfileView accounts={accounts} txns={txns} activeAccount={activeAccount}
+          onBack={() => setView("calendar")} dm={darkMode} />
+      )}
+      {view === "settings" && (
+        <SettingsView
+          dm={darkMode} setDarkMode={setDarkMode}
+          accentColor={accentColor} setAccentColor={setAccentColor}
+          simplifiedDisplay={simplifiedDisplay} setSimplifiedDisplay={setSimplifiedDisplay}
+          showProjectedBalances={showProjectedBalances} setShowProjectedBalances={setShowProjectedBalances}
+          morningForecast={morningForecast} setMorningForecast={setMorningForecast}
+          morningTime={morningTime} setMorningTime={setMorningTime}
+          eveningForecast={eveningForecast} setEveningForecast={setEveningForecast}
+          eveningTime={eveningTime} setEveningTime={setEveningTime}
+          paymentReminders={paymentReminders} setPaymentReminders={setPaymentReminders}
+          reminderTime={reminderTime} setReminderTime={setReminderTime}
+          autoMarkPaid={autoMarkPaid} setAutoMarkPaid={setAutoMarkPaid}
+          onResetData={() => { setTxns([]); setDebts([]); setAssigned({}); setBudgeted(0); }}
+          onBack={() => setView("calendar")} />
+      )}
+
+      {menuOpen && (
+        <SideMenu
+          dm={darkMode}
+          darkMode={darkMode} setDarkMode={setDarkMode}
+          onClose={() => setMenuOpen(false)}
+          onNavigate={(v) => { setView(v); setMenuOpen(false); }}
+        />
       )}
 
       <div style={S.toolbarWrap}>
@@ -2094,13 +2146,12 @@ function seed() {
 // ============================================================================
 const S = {
   root: {
-    maxWidth: 390, height: 844, margin: "0 auto", position: "relative", overflow: "hidden",
-    borderRadius: 44, display: "flex", flexDirection: "column", background: "#fff", color: "#1c1c1e",
+    width: "100%", height: "100dvh", position: "relative", overflow: "hidden",
+    display: "flex", flexDirection: "column", background: "#fff", color: "#1c1c1e",
     fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
-    boxShadow: "0 30px 80px rgba(0,0,0,.4)", border: "10px solid #111",
   },
-  statusBar: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 26px 2px" },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 16px 10px" },
+  statusBar: { display: "none" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 16px 10px", paddingTop: "max(16px, env(safe-area-inset-top))" },
   iconBtn: { width: 40, height: 40, borderRadius: 20, border: "none", background: "#f2f2f7", fontSize: 17, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
   bannerWrap: { padding: "0 12px 8px" },
   banner: { display: "flex", gap: 12, alignItems: "flex-start", borderRadius: 14, padding: "12px 14px" },
@@ -2115,7 +2166,7 @@ const S = {
   todayCircle: { background: "#0a84ff", color: "#fff", width: 26, height: 26, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14 },
   balPill: { alignSelf: "center", background: "#eaeaef", borderRadius: 9, padding: "2px 7px", fontSize: 12, fontWeight: 700, color: "#3a3a3c" },
   txBlock: { display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1, borderRadius: 8, padding: "4px 5px", border: "none", cursor: "pointer", width: "100%", boxSizing: "border-box" },
-  toolbarWrap: { position: "absolute", bottom: 22, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 40, pointerEvents: "none" },
+  toolbarWrap: { position: "absolute", bottom: "max(22px, env(safe-area-inset-bottom))", left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 40, pointerEvents: "none" },
   addOverlay: { position: "absolute", inset: 0, bottom: 0, background: "rgba(0,0,0,.04)", zIndex: 45, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 92, pointerEvents: "auto" },
   addMenu: { display: "flex", flexDirection: "column", gap: 14, width: "78%", maxWidth: 300 },
   addOpt: { display: "flex", alignItems: "center", gap: 18, background: "#fbfbfd", border: "none", borderRadius: 40, padding: "16px 26px", cursor: "pointer", boxShadow: "0 6px 20px rgba(0,0,0,.14)" },
@@ -2214,8 +2265,431 @@ const CSS = `
   .cc-overlay { animation: fade .2s ease; }
   @keyframes up { from { transform:translateY(100%);} to { transform:translateY(0);} }
   @keyframes fade { from { opacity:0;} to { opacity:1;} }
+  @keyframes slideIn { from { transform:translateX(-100%); } to { transform:translateX(0); } }
+  .cc-menu-drawer { animation: slideIn .25s cubic-bezier(.2,.8,.2,1); }
   input::placeholder { color:#b0b0b5; }
   .cc-drag:active { cursor: grabbing; }
   select { -webkit-appearance:none; appearance:none; }
   button:active { transform: scale(.97); }
+
+  /* ── Dark mode ── */
+  .dm { background: #111 !important; color: #f2f2f7 !important; }
+  .dm .cc-cal { background: #111 !important; }
+  .dm .cc-sheet { background: #1c1c1e !important; }
+  .dm .cc-overlay { background: rgba(0,0,0,.65) !important; }
+  .dm input, .dm select, .dm textarea {
+    background: #2c2c2e !important;
+    color: #f2f2f7 !important;
+    border-color: #3a3a3c !important;
+  }
+  .dm input::placeholder { color: #636366 !important; }
+  .dm button { color: #f2f2f7 !important; }
+  .dm .cc-dm-bg { background: #111 !important; }
+  .dm .cc-dm-card { background: #1c1c1e !important; border-color: #3a3a3c !important; }
+  .dm .cc-dm-card2 { background: #2c2c2e !important; }
+  .dm .cc-dm-text { color: #f2f2f7 !important; }
+  .dm .cc-dm-muted { color: #8e8e93 !important; }
+  .dm .cc-dm-border { border-color: #3a3a3c !important; }
+  .dm .cc-dm-divider { border-bottom-color: #3a3a3c !important; }
 `;
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+const th = (dm) => ({
+  bg:     dm ? "#111"     : "#fff",
+  bg2:    dm ? "#1c1c1e"  : "#f7f7f8",
+  bg3:    dm ? "#2c2c2e"  : "#f2f2f7",
+  text:   dm ? "#f2f2f7"  : "#1c1c1e",
+  text2:  dm ? "#aeaeb2"  : "#8e8e93",
+  border: dm ? "#3a3a3c"  : "#e3e3e8",
+  div:    dm ? "#3a3a3c"  : "#f0f0f0",
+});
+
+// ── SideMenu ─────────────────────────────────────────────────────────────────
+function SideMenu({ dm, darkMode, setDarkMode, onClose, onNavigate }) {
+  const t = th(dm);
+  const items = [
+    { icon: "🏆", label: "Forecast",  key: "forecast"  },
+    { icon: "👤", label: "Profile",   key: "profile"   },
+    { icon: "⚙️", label: "Settings", key: "settings"  },
+  ];
+  return (
+    <div style={{ position:"absolute", inset:0, zIndex:80, background:"rgba(0,0,0,.45)" }}
+         onClick={onClose}>
+      <div className="cc-menu-drawer"
+           style={{ position:"absolute", top:0, left:0, bottom:0, width:"82%", maxWidth:320,
+                    background: t.bg, display:"flex", flexDirection:"column",
+                    boxShadow:"6px 0 30px rgba(0,0,0,.25)" }}
+           onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ paddingTop:"max(54px, env(safe-area-inset-top))",
+                      padding:"max(54px, env(safe-area-inset-top)) 24px 18px" }}>
+          <div style={{ fontSize:34, fontWeight:800, color: t.text }}>Menu</div>
+        </div>
+
+        <div style={{ flex:1, overflowY:"auto", padding:"0 0 40px" }}>
+          {/* Dark Mode row */}
+          <div style={{ display:"flex", alignItems:"center", padding:"16px 24px",
+                        borderBottom:`0.5px solid ${t.border}` }}>
+            <span style={{ fontSize:22, marginRight:14 }}>{dm ? "🌙" : "☀️"}</span>
+            <span style={{ flex:1, fontSize:17, fontWeight:600, color: t.text }}>Dark Mode</span>
+            <Toggle on={darkMode} onChange={setDarkMode} />
+          </div>
+
+          {/* Nav items */}
+          {items.map(item => (
+            <button key={item.key}
+              onClick={() => onNavigate(item.key)}
+              style={{ display:"flex", alignItems:"center", gap:16, width:"100%",
+                       padding:"18px 24px", background:"transparent",
+                       borderBottom:`0.5px solid ${t.border}`,
+                       border:"none", borderTop:"none",
+                       cursor:"pointer", color: t.text, textAlign:"left" }}>
+              <span style={{ fontSize:22 }}>{item.icon}</span>
+              <span style={{ fontSize:17, fontWeight:600, flex:1 }}>{item.label}</span>
+              <span style={{ color: t.text2, fontSize:22 }}>›</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── ForecastView ──────────────────────────────────────────────────────────────
+function ForecastView({ accounts, accTxns, dayMap, balance, onBack, dm }) {
+  const t = th(dm);
+  const [months, setMonths] = useState(6);
+  const [selected, setSelected] = useState(accounts.map(a => a.id));
+  const toggle = id => setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+
+  const keys = Object.keys(dayMap).sort();
+  const slice = keys.slice(0, months * 30);
+  const step = Math.max(1, Math.floor(slice.length / 40));
+  const series = slice.filter((_, i) => i % step === 0).map(k => dayMap[k].balance);
+  const endBal = series[series.length - 1] ?? balance;
+  const pct = balance > 0 ? ((endBal - balance) / balance) * 100 : 0;
+  const startLabel = keys[0] ? new Date(keys[0]+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "";
+  const endKey = slice[slice.length - 1];
+  const endLabel = endKey ? new Date(endKey+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "";
+  const perMonth = { daily:30, weekly:52/12, biweekly:26/12, monthly:1, yearly:1/12, once:0 };
+  const mIn  = accTxns.filter(x => x.type==="income" ).reduce((s,x)=>s+x.amount*(perMonth[x.frequency]||0),0);
+  const mOut = accTxns.filter(x => x.type==="expense").reduce((s,x)=>s+x.amount*(perMonth[x.frequency]||0),0);
+  const net  = mIn - mOut;
+  const savingsRate = mIn > 0 ? Math.round((net/mIn)*100) : 0;
+  const ratio = mOut > 0 ? mIn/mOut : 0;
+  const runwayMonths = mOut > 0 ? Math.floor(balance/mOut) : 99;
+  const savingsLabel = savingsRate>=30?"EXCELLENT":savingsRate>=15?"GOOD":savingsRate>=0?"FAIR":"OVERSPENDING";
+  const totalSelBal = accounts.filter(a=>selected.includes(a.id)).reduce((s,a)=>s+a.balance,0);
+  const w=320,h=130,pad=6;
+  const mn=Math.min(...series,balance), mx=Math.max(...series,balance), rng=mx-mn||1;
+  const X=i=>pad+(i/Math.max(1,series.length-1))*(w-pad*2);
+  const Y=v=>pad+(1-(v-mn)/rng)*(h-pad*2);
+  const line=series.map((v,i)=>`${i===0?"M":"L"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+  const card = { background:t.bg2, borderRadius:18, padding:18, marginBottom:16 };
+
+  return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:t.bg }}>
+      <div style={{ display:"flex", alignItems:"center", padding:"8px 16px 6px" }}>
+        <button onClick={onBack} style={{ ...S.iconBtn, background:t.bg3, color:t.text }}>‹</button>
+        <div style={{ flex:1, textAlign:"center", fontSize:22, fontWeight:800, color:t.text }}>Forecast</div>
+        <div style={{ width:40 }} />
+      </div>
+      <div style={{ ...S.bodyScroll, background:t.bg }} className="cc-cal">
+        <div style={card}>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ fontSize:18 }}>📈</span>
+            <span style={{ fontSize:19, fontWeight:800, flex:1, color:t.text }}>Projected Balance</span>
+          </div>
+          <div style={{ fontSize:40, fontWeight:800, color:"var(--ac,#0a84ff)", marginTop:8 }}>{fmtK(endBal)}</div>
+          <div style={{ fontSize:14, color:t.text2 }}>in {months} months</div>
+          <div style={{ fontSize:15, fontWeight:700, color:pct>=0?"var(--ac,#0a84ff)":"#ff453a", marginTop:2 }}>
+            {pct>=0?"↑":"↓"} {Math.abs(pct).toFixed(1)}% <span style={{ color:t.text2, fontWeight:500 }}>from {fmtK(balance)}</span>
+          </div>
+          <svg viewBox={`0 0 ${w} ${h}`} style={{ width:"100%", height:110, marginTop:10 }}>
+            <path d={line} fill="none" stroke="var(--ac,#0a84ff)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+          </svg>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:4 }}>
+            <span style={{ fontSize:14, color:t.text2, fontWeight:600 }}>{startLabel}</span>
+            <select value={months} onChange={e=>setMonths(Number(e.target.value))}
+              style={{ ...S.pillSelect, background:t.bg3, color:t.text, borderColor:t.border }}>
+              {[3,6,12].map(m=><option key={m} value={m}>{m} Months</option>)}
+            </select>
+            <span style={{ fontSize:14, color:t.text2, fontWeight:600 }}>{endLabel}</span>
+          </div>
+        </div>
+
+        <div style={{ display:"flex", gap:12 }}>
+          {[
+            { label:"Runway", val: runwayMonths>=99?"∞":runwayMonths+"m", sub:"Months of coverage" },
+            { label:"Savings Rate", val: savingsRate+"%", sub: savingsLabel },
+          ].map(({label,val,sub})=>(
+            <div key={label} style={{ ...card, flex:1, marginBottom:12 }}>
+              <div style={{ fontSize:18, fontWeight:800, color:t.text }}>{label}</div>
+              <div style={{ fontSize:38, fontWeight:800, margin:"10px 0 6px", color:"var(--ac,#0a84ff)" }}>{val}</div>
+              <div style={{ fontSize:13, color:t.text2 }}>{sub}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={card}>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ fontSize:18 }}>⇄</span>
+            <span style={{ fontSize:19, fontWeight:800, flex:1, color:t.text }}>Income vs Expenses</span>
+            <span style={{ background:"#d6f5e3", color:"#1a8a4a", borderRadius:12, padding:"4px 10px", fontSize:13, fontWeight:800 }}>↗ {ratio.toFixed(1)}:1</span>
+          </div>
+          {[["↗ Income", mIn, "#30a85f"],["↘ Expenses", mOut, "#ff6b6b"],["✅ Net", net, "#7a3fb0"]].map(([lbl,val,col])=>(
+            <div key={lbl} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:12 }}>
+              <span style={{ fontSize:16, fontWeight:700, color:t.text }}>{lbl}</span>
+              <span style={{ fontSize:18, fontWeight:800, color:col }}>{fmtFull(val).replace(".00","")}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ height:120 }} />
+      </div>
+    </div>
+  );
+}
+
+// ── ProfileView ───────────────────────────────────────────────────────────────
+function ProfileView({ accounts, txns, activeAccount, onBack, dm }) {
+  const t = th(dm);
+  const [name, setName] = useState("User");
+  const [editing, setEditing] = useState(false);
+  const totalBalance = accounts.reduce((s,a)=>s+a.balance,0);
+  const totalIncome  = txns.filter(x=>x.type==="income" ).reduce((s,x)=>s+x.amount,0);
+  const totalExpense = txns.filter(x=>x.type==="expense").reduce((s,x)=>s+x.amount,0);
+
+  return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:t.bg }}>
+      <div style={{ display:"flex", alignItems:"center", padding:"8px 16px 6px" }}>
+        <button onClick={onBack} style={{ ...S.iconBtn, background:t.bg3, color:t.text }}>‹</button>
+        <div style={{ flex:1, textAlign:"center", fontSize:22, fontWeight:800, color:t.text }}>Profile</div>
+        <button onClick={()=>setEditing(!editing)}
+          style={{ border:"none", background:"transparent", color:"var(--ac,#0a84ff)", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+          {editing?"Done":"Edit"}
+        </button>
+      </div>
+      <div style={{ ...S.bodyScroll, background:t.bg }} className="cc-cal">
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"24px 0 28px" }}>
+          <div style={{ width:80, height:80, borderRadius:40, background:"var(--ac,#0a84ff)",
+                        display:"flex", alignItems:"center", justifyContent:"center", fontSize:36, marginBottom:14 }}>👤</div>
+          {editing ? (
+            <input value={name} onChange={e=>setName(e.target.value)}
+              style={{ fontSize:24, fontWeight:800, textAlign:"center", border:"none",
+                       borderBottom:`2px solid var(--ac,#0a84ff)`, outline:"none",
+                       background:"transparent", color:t.text, width:200 }} />
+          ) : (
+            <div style={{ fontSize:24, fontWeight:800, color:t.text }}>{name}</div>
+          )}
+          <div style={{ fontSize:14, color:t.text2, marginTop:4 }}>Cash Cycle Member</div>
+        </div>
+
+        <div style={{ background:t.bg2, borderRadius:16, padding:14, marginBottom:16 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:1 }}>
+            {[["Net Worth",fmtK(totalBalance),"var(--ac,#0a84ff)"],
+              ["Transactions",txns.length,t.text],
+              ["Total Income",fmtK(totalIncome),"#30d158"],
+              ["Total Spent",fmtK(totalExpense),"#ff453a"]].map(([lbl,val,col])=>(
+              <div key={lbl} style={{ padding:"14px 10px", textAlign:"center" }}>
+                <div style={{ fontSize:22, fontWeight:800, color:col }}>{val}</div>
+                <div style={{ fontSize:12, color:t.text2, fontWeight:600, marginTop:4 }}>{lbl}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ fontSize:22, fontWeight:800, margin:"10px 4px 10px", color:t.text }}>Accounts</div>
+        <div style={{ background:t.bg2, borderRadius:16, padding:14 }}>
+          {accounts.map((a,i)=>(
+            <div key={a.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 4px",
+                                     borderBottom: i<accounts.length-1 ? `0.5px solid ${t.border}` : "none" }}>
+              <span style={{ width:12, height:12, borderRadius:6, background:a.color, flexShrink:0 }} />
+              <span style={{ flex:1, fontWeight:600, fontSize:16, color:t.text }}>{a.name}</span>
+              <span style={{ fontWeight:800, fontSize:16, color: a.balance>=0 ? t.text : "#ff453a" }}>{fmtFull(a.balance)}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ height:120 }} />
+      </div>
+    </div>
+  );
+}
+
+// ── SettingsView ──────────────────────────────────────────────────────────────
+const ACCENT_COLORS = ["#0a84ff","#30d158","#ff6b6b","#bf5af2","#ff9f0a","#5ac8fa","#ff375f","#636366"];
+
+function SettingsView({
+  dm, setDarkMode, accentColor, setAccentColor,
+  simplifiedDisplay, setSimplifiedDisplay,
+  showProjectedBalances, setShowProjectedBalances,
+  morningForecast, setMorningForecast, morningTime, setMorningTime,
+  eveningForecast, setEveningForecast, eveningTime, setEveningTime,
+  paymentReminders, setPaymentReminders, reminderTime, setReminderTime,
+  autoMarkPaid, setAutoMarkPaid, onResetData, onBack,
+}) {
+  const t = th(dm);
+  const [resetConfirm, setResetConfirm] = useState(false);
+  const [currency, setCurrency] = useState("US Dollar (USD)");
+
+  const SH = ({ title }) => (
+    <div style={{ fontSize:22, fontWeight:800, color:t.text, margin:"24px 0 12px" }}>{title}</div>
+  );
+  const Card = ({ children }) => (
+    <div style={{ background:t.bg2, borderRadius:16, overflow:"hidden" }}>{children}</div>
+  );
+  const Row = ({ icon, label, sub, right, last }) => (
+    <div style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 16px",
+                  borderBottom: last ? "none" : `0.5px solid ${t.border}` }}>
+      {icon && <span style={{ fontSize:20, width:24, textAlign:"center" }}>{icon}</span>}
+      <div style={{ flex:1 }}>
+        <div style={{ fontSize:16, fontWeight:600, color:t.text }}>{label}</div>
+        {sub && <div style={{ fontSize:13, color:t.text2, marginTop:2, lineHeight:1.3 }}>{sub}</div>}
+      </div>
+      {right}
+    </div>
+  );
+  const TimeRow = ({ label, value, onChange, last }) => (
+    <div style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 16px",
+                  borderBottom: last ? "none" : `0.5px solid ${t.border}` }}>
+      <span style={{ fontSize:20, width:24, textAlign:"center" }}>🕐</span>
+      <span style={{ flex:1, fontSize:15, fontWeight:600, color:t.text }}>Forecast Time</span>
+      <input type="time" value={value} onChange={e=>onChange(e.target.value)}
+        style={{ border:"none", background:"transparent", color:"var(--ac,#0a84ff)",
+                 fontSize:15, fontWeight:700, outline:"none", cursor:"pointer" }} />
+    </div>
+  );
+
+  return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:t.bg }}>
+      <div style={{ display:"flex", alignItems:"center", padding:"8px 16px 6px" }}>
+        <button onClick={onBack} style={{ ...S.iconBtn, background:t.bg3, color:t.text }}>‹</button>
+        <div style={{ flex:1, textAlign:"center", fontSize:22, fontWeight:800, color:t.text }}>Settings</div>
+        <div style={{ width:40 }} />
+      </div>
+
+      <div style={{ ...S.bodyScroll, background:t.bg }} className="cc-cal">
+
+        {/* ── Appearance ── */}
+        <SH title="Appearance" />
+        <div style={{ background:t.bg2, borderRadius:16, overflow:"hidden" }}>
+          {[["☀️","Light",false],[" 🌙","Dark",true]].map(([icon,label,val],i)=>(
+            <div key={label} onClick={()=>setDarkMode(val)} style={{
+              display:"flex", alignItems:"center", gap:14, padding:"14px 16px", cursor:"pointer",
+              borderBottom: i===0 ? `0.5px solid ${t.border}` : "none" }}>
+              <span style={{ fontSize:20, width:24, textAlign:"center" }}>{icon}</span>
+              <span style={{ flex:1, fontSize:16, fontWeight:600, color:t.text }}>{label}</span>
+              {dm===val && <span style={{ color:"var(--ac,#0a84ff)", fontSize:20, fontWeight:800 }}>✓</span>}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ fontSize:13, color:t.text2, margin:"14px 4px 8px", fontWeight:600 }}>Accent Color</div>
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap", padding:"2px 0 4px" }}>
+          {ACCENT_COLORS.map(c=>(
+            <button key={c} onClick={()=>setAccentColor(c)}
+              style={{ width:36, height:36, borderRadius:18, background:c, border:"none",
+                       cursor:"pointer", outline: c===accentColor ? `3px solid ${c}` : "none",
+                       outlineOffset:2, boxShadow: c===accentColor ? "0 0 0 2px #fff, 0 0 0 4px "+c : "none" }} />
+          ))}
+        </div>
+
+        {/* ── General ── */}
+        <SH title="General" />
+        <Card>
+          <Row icon="🌐" label="Language" sub="English (EN)"
+            right={<span style={{ color:t.text2, fontSize:20 }}>›</span>} />
+          <Row icon="$" label="Currency" sub={currency}
+            right={
+              <select value={currency} onChange={e=>setCurrency(e.target.value)}
+                style={{ border:"none", background:"transparent", color:"var(--ac,#0a84ff)",
+                         fontSize:15, fontWeight:700, outline:"none", cursor:"pointer" }}>
+                {["US Dollar (USD)","Euro (EUR)","British Pound (GBP)","Canadian Dollar (CAD)","Australian Dollar (AUD)"].map(c=>(
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+            } />
+          <Row icon="≈" label="Simplified Display"
+            sub="Round amounts to whole numbers ($125.50 → $126)"
+            right={<Toggle on={simplifiedDisplay} onChange={setSimplifiedDisplay} />} />
+          <Row icon="〜" label="Projected Balances" last
+            sub="Show projected balance on each calendar day. The forecast banner will still reflect your financial outlook."
+            right={<Toggle on={showProjectedBalances} onChange={setShowProjectedBalances} />} />
+        </Card>
+
+        {/* ── Notifications ── */}
+        <SH title="Notifications" />
+        <Card>
+          <Row icon="🌅" label="Morning Forecast"
+            sub="Get your daily balance forecast each morning"
+            right={<Toggle on={morningForecast} onChange={setMorningForecast} />} />
+          <TimeRow value={morningTime} onChange={setMorningTime} />
+          <Row icon="🌆" label="Evening Forecast"
+            sub="Review your financial outlook each evening"
+            right={<Toggle on={eveningForecast} onChange={setEveningForecast} />} />
+          <TimeRow value={eveningTime} onChange={setEveningTime} />
+          <Row icon="💸" label="Payment Reminders"
+            sub="Get notified about upcoming bills and payments"
+            right={<Toggle on={paymentReminders} onChange={setPaymentReminders} />} />
+          <TimeRow value={reminderTime} onChange={setReminderTime} last />
+        </Card>
+
+        {/* ── Budget Categories ── */}
+        <SH title="Budget Categories" />
+        <Card>
+          <Row icon="✏️" label="Manage Categories"
+            sub="Customize budget categories, emojis, and colors"
+            right={<span style={{ color:t.text2, fontSize:20 }}>›</span>} />
+          <Row icon="⊞" label="Widget Quick Add" last
+            sub="Pick 3 categories to pin on your home screen widget"
+            right={<span style={{ color:t.text2, fontSize:20 }}>›</span>} />
+        </Card>
+
+        {/* ── Expense Tracking ── */}
+        <SH title="Expense Tracking" />
+        <Card>
+          <Row icon="✅" label="Auto-Mark as Paid" last
+            sub="Automatically mark past-due items as paid"
+            right={<Toggle on={autoMarkPaid} onChange={setAutoMarkPaid} />} />
+        </Card>
+
+        {/* ── Data Management ── */}
+        <SH title="Data Management" />
+        <Card>
+          {!resetConfirm ? (
+            <Row icon="↺" label="Reset & Start Fresh"
+              sub="Clear all financial data and bank connections. Your account and preferences will be preserved."
+              last right={<span style={{ color:"#ff453a", fontSize:20 }}>›</span>} />
+          ) : (
+            <div style={{ padding:16 }}>
+              <div style={{ fontSize:15, color:t.text2, lineHeight:1.5, marginBottom:14 }}>
+                This will clear all transactions, budgets, and accounts. Display preferences will be preserved. This action cannot be undone.
+              </div>
+              <div style={{ display:"flex", gap:10 }}>
+                <button onClick={()=>setResetConfirm(false)}
+                  style={{ flex:1, padding:12, borderRadius:12, border:`1px solid ${t.border}`,
+                           background:"transparent", color:t.text, fontWeight:700, fontSize:15, cursor:"pointer" }}>
+                  Cancel
+                </button>
+                <button onClick={()=>{ onResetData(); setResetConfirm(false); }}
+                  style={{ flex:1, padding:12, borderRadius:12, border:"none",
+                           background:"#ff453a", color:"#fff", fontWeight:800, fontSize:15, cursor:"pointer" }}>
+                  Reset
+                </button>
+              </div>
+            </div>
+          )}
+        </Card>
+        {!resetConfirm && (
+          <div style={{ marginTop:-16, cursor:"pointer", height:60 }}
+               onClick={()=>setResetConfirm(true)} />
+        )}
+        <div style={{ fontSize:13, color:t.text2, textAlign:"center", margin:"18px 0 8px", lineHeight:1.5 }}>
+          This will clear all transactions, budgets, and accounts.{"\n"}Display preferences will be preserved. This action cannot be undone.
+        </div>
+
+        <div style={{ height:120 }} />
+      </div>
+    </div>
+  );
+}
