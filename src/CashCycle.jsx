@@ -337,12 +337,12 @@ export default function CashCycle() {
           </div>
         )}
         <div style={S.toolbar} className="cc-toolbar-pill">
-          <TBtn active={view === "calendar"} onClick={() => setView("calendar")}>🗓️</TBtn>
-          <TBtn active={view === "stats"} onClick={() => setView("stats")}>📈</TBtn>
+          <TBtn active={view === "calendar"} onClick={() => setView("calendar")}><IcoCalendar /></TBtn>
+          <TBtn active={view === "stats"} onClick={() => setView("stats")}><IcoPie /></TBtn>
           <button style={{ ...S.plus, transform: addMenu ? "rotate(45deg)" : "rotate(0)" }}
             onClick={() => { setAddMenu((v) => !v); setStatusStep(null); }} aria-label="Add">+</button>
-          <TBtn active={view === "ledger"} onClick={() => setView("ledger")}>🔲</TBtn>
-          <TBtn active={view === "debts" || view === "accounts"} onClick={() => setView("debts")}>💳</TBtn>
+          <TBtn active={view === "ledger"} onClick={() => setView("ledger")}><IcoGrid /></TBtn>
+          <TBtn active={view === "debts" || view === "accounts"} onClick={() => setView("debts")}><IcoCard /></TBtn>
         </div>
       </div>
 
@@ -2126,7 +2126,40 @@ const IconBtn = ({ children, onClick }) => (
   <button onClick={onClick} style={S.iconBtn} className="cc-icon-btn">{children}</button>
 );
 const TBtn = ({ children, active, onClick }) => (
-  <button onClick={onClick} style={{ ...S.tbtn, opacity: active ? 1 : 0.55 }}>{children}</button>
+  <button onClick={onClick} style={{ ...S.tbtn, color: active ? "var(--ac,#0a84ff)" : "#3a3a3c", opacity: active ? 1 : 0.55 }}>{children}</button>
+);
+
+// ── Toolbar SVG icons ─────────────────────────────────────────────────────────
+const IcoCalendar = () => (
+  <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="17" rx="2.5"/>
+    <path d="M8 2v4M16 2v4M3 9h18"/>
+    <circle cx="8"  cy="14" r="1.1" fill="currentColor" stroke="none"/>
+    <circle cx="12" cy="14" r="1.1" fill="currentColor" stroke="none"/>
+    <circle cx="16" cy="14" r="1.1" fill="currentColor" stroke="none"/>
+    <circle cx="8"  cy="18" r="1.1" fill="currentColor" stroke="none"/>
+    <circle cx="12" cy="18" r="1.1" fill="currentColor" stroke="none"/>
+  </svg>
+);
+const IcoPie = () => (
+  <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2v10h10a10 10 0 1 1-10-10z"/>
+    <path d="M12 2a10 10 0 0 1 10 10" strokeDasharray="none"/>
+  </svg>
+);
+const IcoGrid = () => (
+  <svg viewBox="0 0 24 24" width="23" height="23" fill="currentColor">
+    {[5,12,19].flatMap(x => [5,12,19].map(y =>
+      <circle key={`${x}${y}`} cx={x} cy={y} r="1.8"/>
+    ))}
+  </svg>
+);
+const IcoCard = () => (
+  <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="6" width="20" height="14" rx="2.5"/>
+    <path d="M2 11h20"/>
+    <rect x="5" y="15" width="6" height="2" rx="1" fill="currentColor" stroke="none"/>
+  </svg>
 );
 
 function buildForecastSentence(accTxns, balance, dayMap, thresholds) {
