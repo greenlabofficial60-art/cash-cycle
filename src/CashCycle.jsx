@@ -1361,7 +1361,7 @@ function Debts({ debts, addDebt, removeDebt, accounts, setAccounts, txns, setTxn
       {bankSheet && <AddBankSheet onClose={() => setBankSheet(false)}
         onSave={(acc) => { setAccounts((p) => [...p, acc]); setBankSheet(false); }} />}
       {importSheet && <StatementImporter accounts={accounts} activeAccount={activeAccount}
-        existingTxns={txns} onClose={() => setImportSheet(false)}
+        existingTxns={txns} dm={darkMode} onClose={() => setImportSheet(false)}
         onImport={(newTxns) => { setTxns(p => [...p, ...newTxns]); setImportSheet(false); }} />}
     </div>
   );
@@ -3033,8 +3033,10 @@ function SettingsView({
 }
 
 // ============================================================================
-// STATEMENT IMPORTER — CSV bank statement parser
+// STATEMENT IMPORTER — PDF + CSV bank statement parser
 // ============================================================================
+
+// ── merchant → category lookup ───────────────────────────────────────────────
 const MERCHANT_CATS = [
   [["rent","apartment","landlord","leasing","realty"], "rent"],
   [["shell","chevron","bp","exxon","mobil","circle k","speedway","gas","fuel"], "car"],
@@ -3080,6 +3082,104 @@ function parseCSVRow(line) {
   }
   out.push(field.trim());
   return out;
+}
+
+let _pdfjs = null;
+async function getPdfJS() {
+  if (_pdfjs) return _pdfjs;
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    s.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      _pdfjs = window.pdfjsLib;
+      resolve(_pdfjs);
+    };
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+async function extractPDFText(arrayBuffer) {
+  const pdfjsLib = await getPdfJS();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const lines = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const byY = {};
+    for (const item of content.items) {
+      const y = Math.round(item.transform[5]);
+      if (!byY[y]) byY[y] = [];
+      byY[y].push(item.str);
+    }
+    Object.keys(byY).sort((a, b) => b - a).forEach((y) => {
+      const row = byY[y].join(" ").trim();
+      if (row) lines.push(row);
+    });
+  }
+  return lines;
+}
+
+function normalizeDate(s) {
+  if (!s) return null;
+  s = s.trim().replace(/['"]/g, "");
+  // MM/DD/YYYY or MM-DD-YYYY
+  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (m) return `${m[3]}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}`;
+  // YYYY-MM-DD
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return s;
+  // Month DD, YYYY  or  DD Month YYYY
+  m = s.match(/(\w+)\s+(\d{1,2}),?\s+(\d{4})/);
+  if (m) {
+    const months = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+    const mo = months[m[1].slice(0,3).toLowerCase()];
+    if (mo) return `${m[3]}-${String(mo).padStart(2,"0")}-${m[2].padStart(2,"0")}`;
+  }
+  const d = new Date(s);
+  if (!isNaN(d)) return dISO(d);
+  return null;
+}
+
+function parsePDFLines(lines) {
+  const results = [];
+  const dateRe = /\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\w{3,9}\s+\d{1,2},?\s*\d{4})\b/;
+  const amtRe  = /\$?([\d,]+\.\d{2})/g;
+
+  for (const line of lines) {
+    const dm = line.match(dateRe);
+    if (!dm) continue;
+    const dateISO = normalizeDate(dm[1]);
+    if (!dateISO) continue;
+
+    const amounts = [];
+    let am;
+    const amtRe2 = /\$?([\d,]+\.\d{2})/g;
+    while ((am = amtRe2.exec(line)) !== null) {
+      amounts.push(parseFloat(am[1].replace(/,/g, "")));
+    }
+    if (!amounts.length) continue;
+
+    const amount = amounts[amounts.length - 1];
+    if (amount <= 0) continue;
+
+    const afterDate = line.slice(dm.index + dm[0].length).trim();
+    const descRaw = afterDate.replace(/\$?[\d,]+\.\d{2}/g, "").replace(/\s+/g, " ").trim();
+    const merchant = descRaw || "Bank Transaction";
+
+    const lo = line.toLowerCase();
+    const isCredit = lo.includes("deposit") || lo.includes("credit") || lo.includes("payroll") || lo.includes("direct dep");
+    const type = isCredit ? "income" : "expense";
+    const category = type === "income" ? "salary" : guessCat(merchant);
+
+    results.push({
+      id: uid(), date: dateISO, merchant, amount: Math.round(amount * 100) / 100,
+      type, category, name: merchant, status: "paid", frequency: "once"
+    });
+  }
+  return results;
 }
 
 function parseBankCSV(text) {
@@ -3140,33 +3240,68 @@ function parseBankCSV(text) {
   return results;
 }
 
-function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onImport }) {
+function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onImport, dm }) {
   const [parsed, setParsed] = useState([]);
   const [importStep, setImportStep] = useState("upload");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [loadMsg, setLoadMsg] = useState("");
   const [selAcct, setSelAcct] = useState(activeAccount);
   const [selected, setSelected] = useState({});
   const fileRef = useRef(null);
 
-  function handleFile(e) {
+  const bg  = dm ? "#1c1c1e" : "#fff";
+  const bg2 = dm ? "#2c2c2e" : "#f2f2f7";
+  const tx2 = dm ? "#aeaeb2" : "#8e8e93";
+  const txc = dm ? "#f2f2f7" : "#1c1c1e";
+  const brd = dm ? "#3a3a3c" : "#e3e3e8";
+
+  function finalize(txns) {
+    if (!txns.length) { setError("No transactions found in this file."); setLoading(false); return; }
+    const existIds = new Set(existingTxns.map((x) => x.date + "|" + x.amount + "|" + x.name));
+    const fresh = txns.filter((t) => !existIds.has(t.date + "|" + t.amount + "|" + t.name));
+    const sel = {};
+    fresh.forEach((t) => { sel[t.id] = true; });
+    setParsed(fresh);
+    setSelected(sel);
+    setImportStep("review");
+    setError("");
+    setLoading(false);
+  }
+
+  async function handleFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
+    e.target.value = "";
+    setError("");
+    const isPDF = file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf";
+
+    if (isPDF) {
+      setLoading(true);
+      setLoadMsg("Loading PDF engine…");
       try {
-        const txns = parseBankCSV(ev.target.result);
-        if (!txns.length) { setError("No transactions found. Make sure this is a CSV bank statement."); return; }
-        const existIds = new Set(existingTxns.map((x) => x.date + "|" + x.amount + "|" + x.name));
-        const fresh = txns.filter((t) => !existIds.has(t.date + "|" + t.amount + "|" + t.name));
-        const sel = {};
-        fresh.forEach((t) => { sel[t.id] = true; });
-        setParsed(fresh);
-        setSelected(sel);
-        setImportStep("review");
-        setError("");
-      } catch { setError("Could not parse this file. Please try a different CSV."); }
-    };
-    reader.readAsText(file);
+        const buf = await file.arrayBuffer();
+        setLoadMsg("Reading pages…");
+        const lines = await extractPDFText(buf);
+        setLoadMsg("Extracting transactions…");
+        const txns = parsePDFLines(lines);
+        finalize(txns);
+      } catch (err) {
+        setError("Could not read this PDF. Try exporting as CSV instead.");
+        setLoading(false);
+      }
+    } else {
+      setLoading(true);
+      setLoadMsg("Parsing…");
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const txns = parseBankCSV(ev.target.result);
+          finalize(txns);
+        } catch { setError("Could not parse this file."); setLoading(false); }
+      };
+      reader.readAsText(file);
+    }
   }
 
   function doImport() {
@@ -3177,56 +3312,72 @@ function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onI
   const selCount = Object.values(selected).filter(Boolean).length;
 
   return (
-    <div className="cc-overlay" style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.55)", display:"flex", flexDirection:"column", justifyContent:"flex-end", zIndex:200 }} onClick={onClose}>
-      <div className="cc-sheet" style={{ background:"#fff", borderRadius:"20px 20px 0 0", maxHeight:"85vh", display:"flex", flexDirection:"column" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ width:40, height:5, borderRadius:3, background:"#d1d1d6", margin:"10px auto 4px" }} />
-        <div style={{ display:"flex", alignItems:"center", padding:"8px 16px 12px" }}>
-          <button onClick={onClose} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", color:"#8e8e93", padding:"4px 8px 4px 0" }}>✕</button>
-          <div style={{ flex:1, fontSize:20, fontWeight:800, textAlign:"center" }}>Import Statement</div>
+    <div className="cc-overlay" style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", display:"flex", flexDirection:"column", justifyContent:"flex-end", zIndex:200 }} onClick={onClose}>
+      <div className="cc-sheet" style={{ background:bg, borderRadius:"20px 20px 0 0", maxHeight:"88vh", display:"flex", flexDirection:"column" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ width:40, height:5, borderRadius:3, background:"#d1d1d6", margin:"10px auto 4px", flexShrink:0 }} />
+        <div style={{ display:"flex", alignItems:"center", padding:"8px 16px 12px", flexShrink:0 }}>
+          <button onClick={importStep === "review" ? () => { setImportStep("upload"); setParsed([]); } : onClose}
+            style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", color:tx2, padding:"4px 8px 4px 0" }}>
+            {importStep === "review" ? "‹" : "✕"}
+          </button>
+          <div style={{ flex:1, fontSize:20, fontWeight:800, textAlign:"center", color:txc }}>Import Statement</div>
           {importStep === "review" && (
             <button onClick={doImport} disabled={selCount === 0}
               style={{ background:"#0a84ff", color:"#fff", border:"none", borderRadius:12, padding:"8px 16px", fontWeight:700, fontSize:15, cursor:selCount>0?"pointer":"not-allowed", opacity:selCount>0?1:0.5 }}>
               Add {selCount}
             </button>
           )}
+          {importStep === "upload" && <div style={{ width:60 }} />}
         </div>
 
-        {importStep === "upload" ? (
+        {loading ? (
+          <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16, padding:40 }}>
+            <div style={{ width:44, height:44, border:`4px solid ${brd}`, borderTopColor:"#0a84ff", borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
+            <div style={{ color:tx2, fontSize:15, fontWeight:600 }}>{loadMsg}</div>
+            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+          </div>
+        ) : importStep === "upload" ? (
           <div style={{ flex:1, overflowY:"auto", padding:"0 16px 40px" }}>
-            <div style={{ fontSize:15, color:"#8e8e93", lineHeight:1.5, marginBottom:20, textAlign:"center" }}>
-              Download your bank statement as a CSV from your bank's website, then select it below.
+            <div style={{ fontSize:14, color:tx2, lineHeight:1.6, marginBottom:20, textAlign:"center" }}>
+              Import your bank statement as a PDF or CSV — transactions are matched automatically.
             </div>
             {accounts.length > 1 && (
               <div style={{ marginBottom:16 }}>
-                <div style={{ fontSize:14, fontWeight:700, marginBottom:8, color:"#3a3a3c" }}>Import into account</div>
+                <div style={{ fontSize:13, fontWeight:700, marginBottom:8, color:tx2 }}>Import into account</div>
                 <select value={selAcct} onChange={(e) => setSelAcct(e.target.value)}
-                  style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1px solid #e3e3e8", fontSize:15, background:"#f7f7f8" }}>
+                  style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:`1px solid ${brd}`, fontSize:15, background:bg2, color:txc }}>
                   {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </div>
             )}
             <button onClick={() => fileRef.current?.click()}
-              style={{ width:"100%", background:"#f2f2f7", border:"2px dashed #c7c7cc", borderRadius:16, padding:"32px 16px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:12 }}>
-              <span style={{ fontSize:44 }}>📄</span>
-              <span style={{ fontSize:17, fontWeight:700, color:"#1c1c1e" }}>Select CSV File</span>
-              <span style={{ fontSize:14, color:"#8e8e93" }}>Chase · BofA · Wells Fargo · Citi · Capital One</span>
+              style={{ width:"100%", background:bg2, border:`2px dashed ${brd}`, borderRadius:16, padding:"32px 16px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
+              <svg viewBox="0 0 48 48" width="52" height="52" fill="none">
+                <rect x="6" y="4" width="28" height="36" rx="4" fill="#0a84ff" opacity=".15"/>
+                <rect x="6" y="4" width="28" height="36" rx="4" stroke="#0a84ff" strokeWidth="2.2"/>
+                <path d="M28 4v10h10" stroke="#0a84ff" strokeWidth="2.2" strokeLinecap="round"/>
+                <path d="M16 22h16M16 28h10" stroke="#0a84ff" strokeWidth="2" strokeLinecap="round"/>
+                <circle cx="38" cy="36" r="9" fill="#30d158"/>
+                <path d="M34 36l3 3 5-5" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span style={{ fontSize:17, fontWeight:700, color:txc }}>Select PDF or CSV</span>
+              <span style={{ fontSize:13, color:tx2 }}>Chase · BofA · Wells Fargo · Citi · Capital One · Any bank</span>
             </button>
-            <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display:"none" }} onChange={handleFile} />
+            <input ref={fileRef} type="file" accept=".pdf,.csv,application/pdf,text/csv" style={{ display:"none" }} onChange={handleFile} />
             {error && <div style={{ marginTop:16, padding:14, background:"#fde7e7", borderRadius:12, color:"#c0392b", fontWeight:600, fontSize:14, textAlign:"center" }}>{error}</div>}
-            <div style={{ marginTop:20, padding:14, background:"#f7f7f8", borderRadius:12 }}>
-              <div style={{ fontSize:13, fontWeight:700, color:"#3a3a3c", marginBottom:6 }}>How to export a CSV:</div>
-              <div style={{ fontSize:13, color:"#8e8e93", lineHeight:1.8 }}>
-                1. Log in to your bank's website<br/>
-                2. Go to Transactions or Account History<br/>
-                3. Look for "Export", "Download", or "CSV"<br/>
-                4. Select the date range and download
+            <div style={{ marginTop:20, padding:14, background:bg2, borderRadius:12 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:tx2, marginBottom:8 }}>How to get your statement:</div>
+              <div style={{ fontSize:13, color:tx2, lineHeight:1.9 }}>
+                <b style={{color:txc}}>PDF:</b> Download your monthly PDF statement from your bank app<br/>
+                <b style={{color:txc}}>CSV:</b> Go to Transactions → Export / Download → Choose CSV<br/>
+                Works with Chase, BofA, Wells Fargo, Citi, Capital One and more
               </div>
             </div>
           </div>
         ) : (
           <div style={{ flex:1, overflowY:"auto", padding:"0 16px 40px" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-              <div style={{ fontSize:14, color:"#8e8e93" }}>{parsed.length} transaction{parsed.length !== 1 ? "s" : ""} found</div>
+              <div style={{ fontSize:14, color:tx2 }}>{parsed.length} transaction{parsed.length !== 1 ? "s" : ""} found</div>
               <button onClick={() => {
                 const allSel = selCount === parsed.length;
                 const next = {};
@@ -3237,9 +3388,9 @@ function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onI
               </button>
             </div>
             {parsed.length === 0 ? (
-              <div style={{ textAlign:"center", padding:"40px 16px", color:"#8e8e93" }}>
+              <div style={{ textAlign:"center", padding:"40px 16px", color:tx2 }}>
                 <div style={{ fontSize:36, marginBottom:12 }}>✅</div>
-                <div style={{ fontWeight:700 }}>All caught up!</div>
+                <div style={{ fontWeight:700, color:txc }}>All caught up!</div>
                 <div style={{ fontSize:14, marginTop:4 }}>All transactions in this file are already imported.</div>
               </div>
             ) : parsed.map((tx) => {
@@ -3248,18 +3399,18 @@ function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onI
               const tint = tintFor(tx);
               return (
                 <div key={tx.id} onClick={() => setSelected((p) => ({ ...p, [tx.id]: !p[tx.id] }))}
-                  style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 4px", borderBottom:"1px solid #f0f0f0", cursor:"pointer", opacity:on?1:0.45 }}>
-                  <div style={{ width:24, height:24, borderRadius:12, border:`2px solid ${on?"#0a84ff":"#c7c7cc"}`, background:on?"#0a84ff":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                    {on && <span style={{ color:"#fff", fontSize:14, fontWeight:800 }}>✓</span>}
+                  style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 4px", borderBottom:`1px solid ${brd}`, cursor:"pointer", opacity:on?1:0.4 }}>
+                  <div style={{ width:24, height:24, borderRadius:12, border:`2px solid ${on?"#0a84ff":brd}`, background:on?"#0a84ff":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all .15s" }}>
+                    {on && <span style={{ color:"#fff", fontSize:13, fontWeight:900, lineHeight:1 }}>✓</span>}
                   </div>
                   <div style={{ width:38, height:38, borderRadius:10, background:tint.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>
                     {meta.icon}
                   </div>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:14, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{tx.name}</div>
-                    <div style={{ fontSize:12, color:"#8e8e93" }}>{tx.date} · {meta.label}</div>
+                    <div style={{ fontSize:14, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", color:txc }}>{tx.name}</div>
+                    <div style={{ fontSize:12, color:tx2 }}>{tx.date} · {meta.label}</div>
                   </div>
-                  <div style={{ fontSize:16, fontWeight:800, color:tx.type==="income"?"#30d158":"#1c1c1e", flexShrink:0 }}>
+                  <div style={{ fontSize:15, fontWeight:800, color:tx.type==="income"?"#30d158":txc, flexShrink:0 }}>
                     {tx.type==="income"?"+":"-"}{fmtFull(tx.amount)}
                   </div>
                 </div>
