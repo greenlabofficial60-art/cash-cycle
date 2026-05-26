@@ -236,7 +236,8 @@ export default function CashCycle() {
       )}
       {view === "debts" && (
         <Debts debts={debts} addDebt={addDebt} removeDebt={removeDebt}
-          accounts={accounts} setAccounts={setAccounts} />
+          accounts={accounts} setAccounts={setAccounts}
+          txns={txns} setTxns={setTxns} activeAccount={activeAccount} />
       )}
       {view === "forecast" && (
         <ForecastView accounts={accounts} accTxns={accTxns} dayMap={dayMap}
@@ -1222,10 +1223,11 @@ const DEBT_TABS = [
   { id: "ious", label: "IOUs", kind: "iou" },
 ];
 
-function Debts({ debts, addDebt, removeDebt, accounts, setAccounts }) {
+function Debts({ debts, addDebt, removeDebt, accounts, setAccounts, txns, setTxns, activeAccount }) {
   const [tab, setTab] = useState("cards");
   const [sheet, setSheet] = useState(false);
   const [bankSheet, setBankSheet] = useState(false);
+  const [importSheet, setImportSheet] = useState(false);
   const kind = DEBT_TABS.find((t) => t.id === tab).kind;
   const list = debts.filter((d) => d.kind === kind);
 
@@ -1327,12 +1329,22 @@ function Debts({ debts, addDebt, removeDebt, accounts, setAccounts }) {
       <button onClick={() => setBankSheet(true)} style={{ ...S.btnGhostFull }}>
         🏦 Add bank account
       </button>
+      <button onClick={() => setImportSheet(true)}
+        style={{ ...S.btnGhostFull, marginTop: 10, borderColor: "#0a84ff", color: "#0a84ff" }}>
+        📥 Import bank statement (CSV)
+      </button>
+      <div style={{ fontSize: 13, color: "#8e8e93", textAlign: "center", marginTop: 8, lineHeight: 1.4 }}>
+        Download your statement from your bank's website as a CSV file, then import it here. Works with Chase, Bank of America, Wells Fargo, Citi, Capital One and more.
+      </div>
       <div style={{ height: 120 }} />
 
       {sheet && <AddDebtSheet kind={kind} label={labels[kind]} onClose={() => setSheet(false)}
         onSave={(d) => { addDebt(d); setSheet(false); }} />}
       {bankSheet && <AddBankSheet onClose={() => setBankSheet(false)}
         onSave={(acc) => { setAccounts((p) => [...p, acc]); setBankSheet(false); }} />}
+      {importSheet && <StatementImporter accounts={accounts} activeAccount={activeAccount}
+        existingTxns={txns} onClose={() => setImportSheet(false)}
+        onImport={(newTxns) => { setTxns(p => [...p, ...newTxns]); setImportSheet(false); }} />}
     </div>
   );
 }
@@ -2817,6 +2829,246 @@ function SettingsView({
         </div>
 
         <div style={{ height:120 }} />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// STATEMENT IMPORTER — CSV bank statement parser
+// ============================================================================
+const MERCHANT_CATS = [
+  [["rent","apartment","landlord","leasing","realty"], "rent"],
+  [["shell","chevron","bp","exxon","mobil","circle k","speedway","gas","fuel"], "car"],
+  [["at&t","verizon","t-mobile","sprint","boost"], "phone"],
+  [["comcast","xfinity","spectrum","cox","internet","cable"], "bills"],
+  [["electric","water bill","utility","pg&e","national grid","con ed"], "bills"],
+  [["mcdonald","burger king","wendy","taco bell","chipotle","subway","kfc","chick-fil"], "food"],
+  [["starbucks","dunkin","peet","coffee","donut"], "food"],
+  [["uber eats","doordash","grubhub","postmates","instacart"], "food"],
+  [["walmart","target","costco","kroger","safeway","whole foods","trader joe","aldi","publix","heb"], "food"],
+  [["netflix","spotify","hulu","disney","apple.com/bill","amazon prime","youtube premium"], "subs"],
+  [["payroll","salary","direct deposit","ach credit","employer","paycheck"], "salary"],
+  [["amazon","ebay","etsy","shopify","online purchase"], "other-out"],
+  [["cvs","walgreens","rite aid","pharmacy"], "other-out"],
+  [["gym","planet fitness","anytime fitness"], "bills"],
+  [["insurance","geico","progressive","state farm","allstate"], "bills"],
+];
+
+function guessCat(desc) {
+  const d = desc.toLowerCase();
+  for (const [kws, cat] of MERCHANT_CATS) {
+    if (kws.some((k) => d.includes(k))) return cat;
+  }
+  return "other-out";
+}
+
+function parseCSVRow(line) {
+  const out = [];
+  let field = "";
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { field += '"'; i++; }
+        else inQ = false;
+      } else field += ch;
+    } else {
+      if (ch === '"') inQ = true;
+      else if (ch === ",") { out.push(field.trim()); field = ""; }
+      else field += ch;
+    }
+  }
+  out.push(field.trim());
+  return out;
+}
+
+function parseBankCSV(text) {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return [];
+
+  let headerIdx = 0;
+  let cols = null;
+  for (let i = 0; i < Math.min(5, lines.length); i++) {
+    const row = parseCSVRow(lines[i]).map((c) => c.toLowerCase());
+    if (row.some((c) => c.includes("date") || c.includes("amount") || c.includes("description"))) {
+      headerIdx = i; cols = row; break;
+    }
+  }
+  if (!cols) { cols = parseCSVRow(lines[0]).map((c) => c.toLowerCase()); headerIdx = 0; }
+
+  const dateIdx   = cols.findIndex((c) => c.includes("date"));
+  const descIdx   = cols.findIndex((c) => c.includes("description") || c.includes("merchant") || c.includes("memo") || c.includes("payee") || c.includes("detail"));
+  const amtIdx    = cols.findIndex((c) => c === "amount" || c === "transaction amount" || c.includes("amount"));
+  const debitIdx  = cols.findIndex((c) => c.includes("debit") || c.includes("withdrawal") || c.includes("charge"));
+  const creditIdx = cols.findIndex((c) => c.includes("credit") || c.includes("deposit") || c.includes("payment"));
+
+  const results = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const row = parseCSVRow(lines[i]);
+    if (!row.length || row.every((c) => !c)) continue;
+
+    const rawDate  = dateIdx >= 0 ? row[dateIdx] : "";
+    const rawDesc  = descIdx >= 0 ? row[descIdx] : row[1] || "";
+    const rawAmt   = amtIdx >= 0 ? row[amtIdx] : "";
+    const rawDebit = debitIdx >= 0 ? row[debitIdx] : "";
+    const rawCred  = creditIdx >= 0 ? row[creditIdx] : "";
+
+    const dateStr = rawDate.replace(/['"]/g, "").trim();
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) continue;
+    const dateISO = dISO(d);
+
+    const clean = (s) => parseFloat(s.replace(/['"$, ]/g, "")) || 0;
+    let amount = 0;
+    let type = "expense";
+    if (rawDebit || rawCred) {
+      const cv = clean(rawCred);
+      const dv = clean(rawDebit);
+      if (cv > 0) { amount = cv; type = "income"; }
+      else { amount = dv; type = "expense"; }
+    } else {
+      const v = clean(rawAmt);
+      if (v < 0) { amount = Math.abs(v); type = "expense"; }
+      else if (v > 0) { amount = v; type = "income"; }
+    }
+    if (amount <= 0) continue;
+
+    const merchant = rawDesc.replace(/['"]/g, "").trim() || "Unknown";
+    const category = type === "income" ? "salary" : guessCat(merchant);
+    results.push({ id: uid(), date: dateISO, merchant, amount: Math.round(amount * 100) / 100, type, category, name: merchant, status: "paid", frequency: "once" });
+  }
+  return results;
+}
+
+function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onImport }) {
+  const [parsed, setParsed] = useState([]);
+  const [importStep, setImportStep] = useState("upload");
+  const [error, setError] = useState("");
+  const [selAcct, setSelAcct] = useState(activeAccount);
+  const [selected, setSelected] = useState({});
+  const fileRef = useRef(null);
+
+  function handleFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const txns = parseBankCSV(ev.target.result);
+        if (!txns.length) { setError("No transactions found. Make sure this is a CSV bank statement."); return; }
+        const existIds = new Set(existingTxns.map((x) => x.date + "|" + x.amount + "|" + x.name));
+        const fresh = txns.filter((t) => !existIds.has(t.date + "|" + t.amount + "|" + t.name));
+        const sel = {};
+        fresh.forEach((t) => { sel[t.id] = true; });
+        setParsed(fresh);
+        setSelected(sel);
+        setImportStep("review");
+        setError("");
+      } catch { setError("Could not parse this file. Please try a different CSV."); }
+    };
+    reader.readAsText(file);
+  }
+
+  function doImport() {
+    const toAdd = parsed.filter((t) => selected[t.id]).map((t) => ({ ...t, account: selAcct }));
+    onImport(toAdd);
+  }
+
+  const selCount = Object.values(selected).filter(Boolean).length;
+
+  return (
+    <div className="cc-overlay" style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.55)", display:"flex", flexDirection:"column", justifyContent:"flex-end", zIndex:200 }} onClick={onClose}>
+      <div className="cc-sheet" style={{ background:"#fff", borderRadius:"20px 20px 0 0", maxHeight:"85vh", display:"flex", flexDirection:"column" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ width:40, height:5, borderRadius:3, background:"#d1d1d6", margin:"10px auto 4px" }} />
+        <div style={{ display:"flex", alignItems:"center", padding:"8px 16px 12px" }}>
+          <button onClick={onClose} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", color:"#8e8e93", padding:"4px 8px 4px 0" }}>✕</button>
+          <div style={{ flex:1, fontSize:20, fontWeight:800, textAlign:"center" }}>Import Statement</div>
+          {importStep === "review" && (
+            <button onClick={doImport} disabled={selCount === 0}
+              style={{ background:"#0a84ff", color:"#fff", border:"none", borderRadius:12, padding:"8px 16px", fontWeight:700, fontSize:15, cursor:selCount>0?"pointer":"not-allowed", opacity:selCount>0?1:0.5 }}>
+              Add {selCount}
+            </button>
+          )}
+        </div>
+
+        {importStep === "upload" ? (
+          <div style={{ flex:1, overflowY:"auto", padding:"0 16px 40px" }}>
+            <div style={{ fontSize:15, color:"#8e8e93", lineHeight:1.5, marginBottom:20, textAlign:"center" }}>
+              Download your bank statement as a CSV from your bank's website, then select it below.
+            </div>
+            {accounts.length > 1 && (
+              <div style={{ marginBottom:16 }}>
+                <div style={{ fontSize:14, fontWeight:700, marginBottom:8, color:"#3a3a3c" }}>Import into account</div>
+                <select value={selAcct} onChange={(e) => setSelAcct(e.target.value)}
+                  style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1px solid #e3e3e8", fontSize:15, background:"#f7f7f8" }}>
+                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+            )}
+            <button onClick={() => fileRef.current?.click()}
+              style={{ width:"100%", background:"#f2f2f7", border:"2px dashed #c7c7cc", borderRadius:16, padding:"32px 16px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:12 }}>
+              <span style={{ fontSize:44 }}>📄</span>
+              <span style={{ fontSize:17, fontWeight:700, color:"#1c1c1e" }}>Select CSV File</span>
+              <span style={{ fontSize:14, color:"#8e8e93" }}>Chase · BofA · Wells Fargo · Citi · Capital One</span>
+            </button>
+            <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display:"none" }} onChange={handleFile} />
+            {error && <div style={{ marginTop:16, padding:14, background:"#fde7e7", borderRadius:12, color:"#c0392b", fontWeight:600, fontSize:14, textAlign:"center" }}>{error}</div>}
+            <div style={{ marginTop:20, padding:14, background:"#f7f7f8", borderRadius:12 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"#3a3a3c", marginBottom:6 }}>How to export a CSV:</div>
+              <div style={{ fontSize:13, color:"#8e8e93", lineHeight:1.8 }}>
+                1. Log in to your bank's website<br/>
+                2. Go to Transactions or Account History<br/>
+                3. Look for "Export", "Download", or "CSV"<br/>
+                4. Select the date range and download
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ flex:1, overflowY:"auto", padding:"0 16px 40px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+              <div style={{ fontSize:14, color:"#8e8e93" }}>{parsed.length} transaction{parsed.length !== 1 ? "s" : ""} found</div>
+              <button onClick={() => {
+                const allSel = selCount === parsed.length;
+                const next = {};
+                parsed.forEach((t) => { next[t.id] = !allSel; });
+                setSelected(next);
+              }} style={{ background:"none", border:"none", color:"#0a84ff", fontWeight:700, fontSize:15, cursor:"pointer" }}>
+                {selCount === parsed.length ? "Deselect All" : "Select All"}
+              </button>
+            </div>
+            {parsed.length === 0 ? (
+              <div style={{ textAlign:"center", padding:"40px 16px", color:"#8e8e93" }}>
+                <div style={{ fontSize:36, marginBottom:12 }}>✅</div>
+                <div style={{ fontWeight:700 }}>All caught up!</div>
+                <div style={{ fontSize:14, marginTop:4 }}>All transactions in this file are already imported.</div>
+              </div>
+            ) : parsed.map((tx) => {
+              const on = !!selected[tx.id];
+              const meta = catMeta(tx.category);
+              const tint = tintFor(tx);
+              return (
+                <div key={tx.id} onClick={() => setSelected((p) => ({ ...p, [tx.id]: !p[tx.id] }))}
+                  style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 4px", borderBottom:"1px solid #f0f0f0", cursor:"pointer", opacity:on?1:0.45 }}>
+                  <div style={{ width:24, height:24, borderRadius:12, border:`2px solid ${on?"#0a84ff":"#c7c7cc"}`, background:on?"#0a84ff":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    {on && <span style={{ color:"#fff", fontSize:14, fontWeight:800 }}>✓</span>}
+                  </div>
+                  <div style={{ width:38, height:38, borderRadius:10, background:tint.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>
+                    {meta.icon}
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:14, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{tx.name}</div>
+                    <div style={{ fontSize:12, color:"#8e8e93" }}>{tx.date} · {meta.label}</div>
+                  </div>
+                  <div style={{ fontSize:16, fontWeight:800, color:tx.type==="income"?"#30d158":"#1c1c1e", flexShrink:0 }}>
+                    {tx.type==="income"?"+":"-"}{fmtFull(tx.amount)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
