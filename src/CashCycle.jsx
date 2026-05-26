@@ -139,6 +139,9 @@ export default function CashCycle() {
   const [paymentReminders, setPaymentReminders] = useState(true);
   const [reminderTime, setReminderTime] = useState("18:00");
   const [autoMarkPaid, setAutoMarkPaid] = useState(false);
+  const [showBalancePanel, setShowBalancePanel] = useState(false);
+  // IDs excluded from projections; new accounts are included by default
+  const [excludedAccounts, setExcludedAccounts] = useState(new Set());
 
   _simplifiedDisplay = simplifiedDisplay;
 
@@ -155,24 +158,27 @@ export default function CashCycle() {
   }, [autoMarkPaid, txns]); // eslint-disable-line
 
   const acc = accounts.find((a) => a.id === activeAccount);
-  const accTxns = txns.filter((x) => x.account === activeAccount);
+  // included = every account not in the excluded set
+  const includedIds = accounts.map(a => a.id).filter(id => !excludedAccounts.has(id));
+  const totalBalance = accounts.filter(a => includedIds.includes(a.id)).reduce((s, a) => s + a.balance, 0);
+  // project using all included accounts' transactions
+  const accTxns = txns.filter((x) => includedIds.includes(x.account));
 
   const { dayMap, lowest, end } = useMemo(() => {
     const start = new Date(todayISO() + "T00:00:00");
     const end = new Date(start); end.setMonth(end.getMonth() + 6);
     const events = [];
     for (const tx of accTxns) {
-      if (tx.type === "goal") continue; // goals are targets, not balance movements
+      if (tx.type === "goal") continue;
       for (const d of occurrences(tx, start, end))
         events.push({ key: dISO(d), amount: tx.type === "income" ? tx.amount : -tx.amount, tx });
     }
-    // goals appear on the calendar but don't move the projected balance
     const goalEvents = [];
     for (const tx of accTxns.filter((x) => x.type === "goal"))
       for (const d of occurrences(tx, start, end))
         goalEvents.push({ key: dISO(d), tx });
     const map = {};
-    let bal = acc ? acc.balance : 0;
+    let bal = totalBalance;
     const cur = new Date(start);
     let lowest = { value: bal, date: new Date(start) };
     while (cur <= end) {
@@ -186,9 +192,9 @@ export default function CashCycle() {
       cur.setDate(cur.getDate() + 1);
     }
     return { dayMap: map, lowest, end };
-  }, [accTxns, acc]);
+  }, [accTxns, totalBalance]); // eslint-disable-line
 
-  const forecast = buildForecastSentence(accTxns, acc?.balance ?? 0, dayMap, thresholds);
+  const forecast = buildForecastSentence(accTxns, totalBalance, dayMap, thresholds);
 
   function saveTx(tx) {
     setTxns((p) => (p.some((x) => x.id === tx.id) ? p.map((x) => (x.id === tx.id ? tx : x)) : [...p, tx]));
@@ -205,10 +211,11 @@ export default function CashCycle() {
           <IconBtn onClick={() => setMenuOpen(true)}>☰</IconBtn>
           <IconBtn>💬</IconBtn>
         </div>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{fmtK(acc?.balance ?? 0)}</div>
+        <button onClick={() => setShowBalancePanel(true)}
+          style={{ textAlign: "center", background: "transparent", border: "none", cursor: "pointer", padding: "2px 8px" }}>
+          <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{fmtK(totalBalance)}</div>
           <div style={{ fontSize: 11, color: "#8e8e93", fontWeight: 600 }}>Updated just now</div>
-        </div>
+        </button>
         <div style={{ display: "flex", gap: 8 }}>
           <IconBtn onClick={() => setShowInsights(true)}>📊</IconBtn>
           <IconBtn>🏆</IconBtn>
@@ -263,9 +270,17 @@ export default function CashCycle() {
           paymentReminders={paymentReminders} setPaymentReminders={setPaymentReminders}
           reminderTime={reminderTime} setReminderTime={setReminderTime}
           autoMarkPaid={autoMarkPaid} setAutoMarkPaid={setAutoMarkPaid}
-          onResetData={() => { setTxns([]); setDebts([]); setAssigned({}); setBudgeted(0); }}
+          onResetData={() => { setTxns([]); setDebts([]); setAssigned({}); setBudgeted(0); setExcludedAccounts(new Set()); }}
           onManageCategories={() => setView("stats")}
           onBack={() => setView("calendar")} />
+      )}
+
+      {showBalancePanel && (
+        <BalancePanel
+          accounts={accounts} txns={txns} forecast={forecast}
+          totalBalance={totalBalance} includedIds={includedIds}
+          excludedAccounts={excludedAccounts} setExcludedAccounts={setExcludedAccounts}
+          dm={darkMode} onClose={() => setShowBalancePanel(false)} />
       )}
 
       {menuOpen && (
@@ -2426,6 +2441,145 @@ function SideMenu({ dm, darkMode, setDarkMode, onClose, onNavigate }) {
               </button>
             </div>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── BalancePanel ──────────────────────────────────────────────────────────────
+function BalancePanel({ accounts, txns, forecast, totalBalance, includedIds, excludedAccounts, setExcludedAccounts, dm, onClose }) {
+  const t = th(dm);
+  const [tab, setTab] = useState("accounts");
+
+  function toggleAccount(id) {
+    setExcludedAccounts(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id); // re-include
+      } else {
+        // only exclude if at least one account stays included
+        const wouldRemain = accounts.filter(a => a.id !== id && !next.has(a.id)).length;
+        if (wouldRemain > 0) next.add(id);
+      }
+      return next;
+    });
+  }
+
+  const recentTxns = [...txns].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30);
+
+  return (
+    <div style={{ position:"absolute", inset:0, zIndex:75, background:"rgba(0,0,0,.35)", display:"flex", flexDirection:"column", alignItems:"center", padding:"12px 12px 0" }}
+         onClick={onClose}>
+      <div style={{ width:"100%", maxWidth:430, background:t.bg, borderRadius:24, overflow:"hidden",
+                    maxHeight:"90vh", display:"flex", flexDirection:"column",
+                    boxShadow:"0 20px 60px rgba(0,0,0,.25)" }}
+           onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ padding:"22px 20px 16px", textAlign:"center", position:"relative", borderBottom:`0.5px solid ${t.border}` }}>
+          <button onClick={onClose}
+            style={{ position:"absolute", top:16, right:16, width:34, height:34, borderRadius:17,
+                     background:t.bg3, border:"none", cursor:"pointer", fontSize:17,
+                     display:"flex", alignItems:"center", justifyContent:"center", color:t.text }}>
+            ✕
+          </button>
+          <div style={{ fontSize:11, fontWeight:800, color:t.text2, letterSpacing:1.1, marginBottom:8 }}>CASH BALANCE</div>
+          <div style={{ fontSize:40, fontWeight:800, color:t.text, lineHeight:1 }}>{fmtFull(totalBalance)}</div>
+          {/* forecast pill */}
+          <div style={{ display:"inline-flex", alignItems:"center", gap:7, marginTop:12,
+                        background: dm ? "#1a3a1a" : "#e8f5e9", borderRadius:22,
+                        padding:"7px 16px", fontSize:14, fontWeight:600,
+                        color: dm ? "#6fcf6f" : "#2e7d32" }}>
+            <span>{forecast.icon}</span>
+            <span>{forecast.title} — {forecast.body.split(",").slice(-1)[0]?.trim() || forecast.body}</span>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display:"flex", margin:"14px 16px 8px", background:t.bg3, borderRadius:14, padding:3, gap:3 }}>
+          {[
+            { id:"accounts", label:"Accounts", icon:<IcoCard /> },
+            { id:"transactions", label:"Transactions", icon:<IcoGrid /> },
+          ].map(tb => (
+            <button key={tb.id} onClick={() => setTab(tb.id)}
+              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                       padding:"10px", border:"none", borderRadius:11, cursor:"pointer",
+                       background: tab===tb.id ? (dm ? "#2c2c2e" : "#fff") : "transparent",
+                       color: tab===tb.id ? t.text : t.text2, fontWeight:700, fontSize:15,
+                       boxShadow: tab===tb.id ? "0 1px 4px rgba(0,0,0,.12)" : "none" }}>
+              <span style={{ width:18, height:18, display:"flex", alignItems:"center", justifyContent:"center" }}>{tb.icon}</span>
+              {tb.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div style={{ flex:1, overflowY:"auto", padding:"4px 16px 32px" }} className="cc-cal">
+          {tab === "accounts" ? (
+            <>
+              <div style={{ fontSize:11, fontWeight:800, color:t.text2, letterSpacing:0.9, margin:"10px 0 12px" }}>
+                INCLUDED IN PROJECTIONS
+              </div>
+              {accounts.map(a => {
+                const isOn = !excludedAccounts.has(a.id);
+                return (
+                  <div key={a.id} onClick={() => toggleAccount(a.id)}
+                    style={{ display:"flex", alignItems:"center", gap:14, padding:"16px 14px",
+                             border:`1.5px solid ${isOn ? "var(--ac,#0a84ff)" : t.border}`,
+                             borderRadius:16, marginBottom:10, cursor:"pointer",
+                             background: isOn ? (dm ? "#0a1e3a" : "#f0f6ff") : t.bg,
+                             transition:"all .15s" }}>
+                    <div style={{ width:24, height:24, borderRadius:7, flexShrink:0,
+                                  background: isOn ? "var(--ac,#0a84ff)" : "transparent",
+                                  border:`2px solid ${isOn ? "var(--ac,#0a84ff)" : "#c7c7cc"}`,
+                                  display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      {isOn && <span style={{ color:"#fff", fontSize:13, fontWeight:900, lineHeight:1 }}>✓</span>}
+                    </div>
+                    <span style={{ flex:1, fontSize:17, fontWeight:600, color:t.text }}>{a.name}</span>
+                    <span style={{ fontSize:17, fontWeight:800, color:"var(--ac,#0a84ff)" }}>{fmtFull(a.balance)}</span>
+                  </div>
+                );
+              })}
+              {accounts.length === 0 && (
+                <div style={{ textAlign:"center", padding:"30px 0", color:t.text2 }}>No accounts yet. Add one from the 💳 tab.</div>
+              )}
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize:11, fontWeight:800, color:t.text2, letterSpacing:0.9, margin:"10px 0 12px" }}>
+                RECENT TRANSACTIONS
+              </div>
+              {recentTxns.length === 0 ? (
+                <div style={{ textAlign:"center", padding:"40px 0", color:t.text2 }}>No transactions yet.</div>
+              ) : recentTxns.map(tx => {
+                const meta = catMeta(tx.category);
+                const tint = tintFor(tx);
+                const acct = accounts.find(a => a.id === tx.account);
+                return (
+                  <div key={tx.id} style={{ display:"flex", alignItems:"center", gap:12,
+                                            padding:"12px 0", borderBottom:`0.5px solid ${t.div}` }}>
+                    <div style={{ width:40, height:40, borderRadius:11, background:tint.bg,
+                                  display:"flex", alignItems:"center", justifyContent:"center",
+                                  fontSize:19, flexShrink:0 }}>
+                      {meta.icon}
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:15, fontWeight:700, color:t.text,
+                                    whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{tx.name}</div>
+                      <div style={{ fontSize:12, color:t.text2 }}>
+                        {tx.date}{acct ? ` · ${acct.name}` : ""} · {FREQ_LABEL[tx.frequency] || "One-time"}
+                      </div>
+                    </div>
+                    <div style={{ fontSize:15, fontWeight:800, flexShrink:0,
+                                  color: tx.type==="income" ? "#30d158" : t.text }}>
+                      {tx.type==="income" ? "+" : "-"}{fmtFull(tx.amount)}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
       </div>
     </div>
