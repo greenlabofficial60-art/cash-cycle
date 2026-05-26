@@ -145,12 +145,14 @@ export default function CashCycle() {
   useEffect(() => {
     if (!autoMarkPaid) return;
     const today = todayISO();
+    const needsMark = txns.some(tx => tx.type === "expense" && tx.date < today && tx.status !== "paid");
+    if (!needsMark) return;
     setTxns(p => p.map(tx =>
       tx.type === "expense" && tx.date < today && tx.status !== "paid"
         ? { ...tx, status: "paid" }
         : tx
     ));
-  }, [autoMarkPaid]);
+  }, [autoMarkPaid, txns]); // eslint-disable-line
 
   const acc = accounts.find((a) => a.id === activeAccount);
   const accTxns = txns.filter((x) => x.account === activeAccount);
@@ -465,7 +467,8 @@ function Insights({ accounts, accTxns, dayMap, balance, onClose }) {
 
   // chart geometry
   const w = 320, h = 130, pad = 6;
-  const mn = Math.min(...series, balance), mx = Math.max(...series, balance);
+  const allVals = series.length ? [...series, balance] : [balance];
+  const mn = Math.min(...allVals), mx = Math.max(...allVals);
   const rng = mx - mn || 1;
   const X = (i) => pad + (i / Math.max(1, series.length - 1)) * (w - pad * 2);
   const Y = (v) => pad + (1 - (v - mn) / rng) * (h - pad * 2);
@@ -905,7 +908,7 @@ function PeriodPicker({ current, onClose, onPick }) {
 
 // confirm dialog (image 5)
 function ConfirmPeriod({ period, onCancel, onConfirm }) {
-  const p = PERIODS.find((x) => x.id === period);
+  const p = PERIODS.find((x) => x.id === period) || PERIODS[0];
   const copy = {
     monthly: "Switch to monthly budgeting like YNAB? This will budget from the 1st to the last day of each month, giving you a consistent monthly view of your finances.",
     payperiod: "Switch to pay-period budgeting? Your budget will align with your pay schedule so every paycheck has a plan.",
@@ -1810,7 +1813,7 @@ function SourceSheet({ accounts, onClose, onSave }) {
   const [target, setTarget] = useState("");
   const [account, setAccount] = useState("");
   const [typeOpen, setTypeOpen] = useState(false);
-  const curType = SOURCE_TYPES.find((t) => t.id === stype);
+  const curType = SOURCE_TYPES.find((t) => t.id === stype) || SOURCE_TYPES[0];
 
   function submit() {
     if (!title.trim()) return;
@@ -2308,19 +2311,29 @@ const CSS = `
     border-color: #3a3a3c !important;
   }
   .dm input::placeholder { color: #636366 !important; }
-  .dm button { color: #f2f2f7 !important; }
-  .dm .cc-dm-bg { background: #111 !important; }
-  .dm .cc-dm-card { background: #1c1c1e !important; border-color: #3a3a3c !important; }
-  .dm .cc-dm-card2 { background: #2c2c2e !important; }
-  .dm .cc-dm-text { color: #f2f2f7 !important; }
-  .dm .cc-dm-muted { color: #8e8e93 !important; }
-  .dm .cc-dm-border { border-color: #3a3a3c !important; }
-  .dm .cc-dm-divider { border-bottom-color: #3a3a3c !important; }
   .dm .cc-icon-btn { background: #2c2c2e !important; color: #f2f2f7 !important; }
   .dm .cc-toolbar-pill { background: rgba(28,28,30,.95) !important; }
   .dm .cc-bal-pill { background: #2c2c2e !important; color: #aeaeb2 !important; }
   .dm .cc-month-chip { background: #1c1c1e !important; color: #f2f2f7 !important; box-shadow: 0 2px 10px rgba(0,0,0,.5) !important; }
   .dm .cc-dow-cell { color: #636366 !important; }
+  /* Neutral / uncolored buttons only — never override buttons with explicit accent/danger colors */
+  .dm .cc-btn-neutral { background: #2c2c2e !important; color: #f2f2f7 !important; }
+  .dm .cc-btn-ghost { background: transparent !important; color: #f2f2f7 !important; border-color: #3a3a3c !important; }
+  /* View/sheet backgrounds in dark mode */
+  .dm .cc-view-bg { background: #111 !important; }
+  .dm .cc-card-bg { background: #1c1c1e !important; }
+  .dm .cc-card2-bg { background: #2c2c2e !important; }
+  /* Text colors in dark mode */
+  .dm .cc-text-primary { color: #f2f2f7 !important; }
+  .dm .cc-text-muted { color: #aeaeb2 !important; }
+  /* Borders */
+  .dm .cc-border { border-color: #3a3a3c !important; }
+  /* Dropdown / list items */
+  .dm .cc-drop-item { background: #1c1c1e !important; color: #f2f2f7 !important; border-bottom-color: #3a3a3c !important; }
+  /* Add-menu options */
+  .dm .cc-addopt { background: #1c1c1e !important; color: #f2f2f7 !important; }
+  /* Grabber */
+  .dm .cc-grabber { background: #3a3a3c !important; }
 `;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -2412,7 +2425,8 @@ function ForecastView({ accounts, accTxns, dayMap, balance, onBack, dm }) {
   const savingsLabel = savingsRate>=30?"EXCELLENT":savingsRate>=15?"GOOD":savingsRate>=0?"FAIR":"OVERSPENDING";
   const totalSelBal = accounts.filter(a=>selected.includes(a.id)).reduce((s,a)=>s+a.balance,0);
   const w=320,h=130,pad=6;
-  const mn=Math.min(...series,balance), mx=Math.max(...series,balance), rng=mx-mn||1;
+  const _vals=series.length?[...series,balance]:[balance];
+  const mn=Math.min(..._vals), mx=Math.max(..._vals), rng=mx-mn||1;
   const X=i=>pad+(i/Math.max(1,series.length-1))*(w-pad*2);
   const Y=v=>pad+(1-(v-mn)/rng)*(h-pad*2);
   const line=series.map((v,i)=>`${i===0?"M":"L"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
@@ -2695,7 +2709,7 @@ function SettingsView({
     <div style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 16px",
                   borderBottom: last ? "none" : `0.5px solid ${t.border}` }}>
       <span style={{ fontSize:20, width:24, textAlign:"center" }}>🕐</span>
-      <span style={{ flex:1, fontSize:15, fontWeight:600, color:t.text }}>Forecast Time</span>
+      <span style={{ flex:1, fontSize:15, fontWeight:600, color:t.text }}>{label || "Schedule"}</span>
       <input type="time" value={value} onChange={e=>onChange(e.target.value)}
         style={{ border:"none", background:"transparent", color:"var(--ac,#0a84ff)",
                  fontSize:15, fontWeight:700, outline:"none", cursor:"pointer" }} />
@@ -2765,15 +2779,15 @@ function SettingsView({
           <Row icon="🌅" label="Morning Forecast"
             sub="Get your daily balance forecast each morning"
             right={<Toggle on={morningForecast} onChange={setMorningForecast} />} />
-          <TimeRow value={morningTime} onChange={setMorningTime} />
+          <TimeRow label="Morning Time" value={morningTime} onChange={setMorningTime} />
           <Row icon="🌆" label="Evening Forecast"
             sub="Review your financial outlook each evening"
             right={<Toggle on={eveningForecast} onChange={setEveningForecast} />} />
-          <TimeRow value={eveningTime} onChange={setEveningTime} />
+          <TimeRow label="Evening Time" value={eveningTime} onChange={setEveningTime} />
           <Row icon="💸" label="Payment Reminders"
             sub="Get notified about upcoming bills and payments"
             right={<Toggle on={paymentReminders} onChange={setPaymentReminders} />} />
-          <TimeRow value={reminderTime} onChange={setReminderTime} last />
+          <TimeRow label="Reminder Time" value={reminderTime} onChange={setReminderTime} last />
         </Card>
 
         {/* ── Budget Categories ── */}
@@ -2824,9 +2838,6 @@ function SettingsView({
             </div>
           )}
         </Card>
-        <div style={{ fontSize:13, color:t.text2, textAlign:"center", margin:"14px 0 8px", lineHeight:1.5 }}>
-          This will clear all transactions, budgets, and accounts. Display preferences will be preserved. This action cannot be undone.
-        </div>
 
         <div style={{ height:120 }} />
       </div>
