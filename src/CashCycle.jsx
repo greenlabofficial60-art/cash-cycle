@@ -2498,7 +2498,7 @@ const th = (dm) => ({
 function SideMenu({ dm, darkMode, setDarkMode, onClose, onNavigate }) {
   const t = th(dm);
   const items = [
-    { icon: "🏆", label: "Forecast",  key: "forecast"  },
+    { icon: "📅", label: "Forecast",  key: "calendar"  },
     { icon: "👤", label: "Profile",   key: "profile"   },
     { icon: "⚙️", label: "Settings", key: "settings"  },
   ];
