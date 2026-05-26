@@ -11,12 +11,12 @@
 //  6. Paste your values, save this file, and redeploy
 // ─────────────────────────────────────────────────────────────────────────────
 const FIREBASE_CONFIG = {
-  apiKey:            "",   // ← paste here
-  authDomain:        "",
-  projectId:         "",
-  storageBucket:     "",
-  messagingSenderId: "",
-  appId:             "",
+  apiKey:            "AIzaSyCqLqK3HDSJQroc_Grp2QTLNEJT8HiofR0",
+  authDomain:        "cashaycle.firebaseapp.com",
+  projectId:         "cashaycle",
+  storageBucket:     "cashaycle.firebasestorage.app",
+  messagingSenderId: "1038405752515",
+  appId:             "1:1038405752515:web:deeab912e5ebcdc293b476",
 };
 
 export const FIREBASE_READY = !!(FIREBASE_CONFIG.apiKey);
