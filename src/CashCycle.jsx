@@ -1,4 +1,9 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import {
+  FIREBASE_READY, fbAuth, fbDb,
+  GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
+  doc as fbDoc, setDoc, getDoc,
+} from "./firebase.js";
 
 // ============================================================================
 // Cash Cycle — calendar-based cash-flow forecasting (iPhone style)
@@ -93,57 +98,149 @@ function occurrences(tx, start, end) {
   return out;
 }
 
+// ── localStorage persistence ─────────────────────────────────────────────────
+const LS_KEY = "cc_v1";
+const DEFAULT_ACCOUNTS = [{ id: "acc1", name: "Checking", balance: 7500, color: "#0a84ff" }];
+const DEFAULT_SOURCES  = [{ id: "src1", title: "Hourly Job", icon: "⏱️", type: "hourly", target: 0, account: "acc1" }];
+
+function loadLS() {
+  try { const v = localStorage.getItem(LS_KEY); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+function saveLS(data) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch {}
+}
+function clearLS() {
+  try { localStorage.removeItem(LS_KEY); } catch {}
+}
+
 // ============================================================================
 export default function CashCycle() {
-  const [accounts, setAccounts] = useState([
-    { id: "acc1", name: "Checking", balance: 7500, color: "#0a84ff" },
-  ]);
-  const [activeAccount, setActiveAccount] = useState("acc1");
-  const [txns, setTxns] = useState(() => seed());
+  const _saved = useMemo(loadLS, []); // read once at mount
+
+  const [accounts, setAccounts] = useState(() => _saved?.accounts ?? DEFAULT_ACCOUNTS);
+  const [activeAccount, setActiveAccount] = useState(() => _saved?.activeAccount ?? "acc1");
+  const [txns, setTxns] = useState(() => _saved?.txns ?? seed());
   const [view, setView] = useState("calendar");
   const [sheet, setSheet] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [addMenu, setAddMenu] = useState(false);   // radial + menu open?
-  const [statusStep, setStatusStep] = useState(null); // null | "expense" | "income" — which type is picking a sub-option
-  const [newType, setNewType] = useState("expense"); // type chosen from + menu
-  const [newPaid, setNewPaid] = useState(false);     // planned vs paid
-  const [incomeFlow, setIncomeFlow] = useState(null); // null | "planned" | "received"
-  const [sourceSheet, setSourceSheet] = useState(false); // New Income Source sheet
-  const [sources, setSources] = useState([
-    { id: "src1", title: "Hourly Job", icon: "⏱️", type: "hourly", target: 0, account: "acc1" },
-  ]);
+  const [addMenu, setAddMenu] = useState(false);
+  const [statusStep, setStatusStep] = useState(null);
+  const [newType, setNewType] = useState("expense");
+  const [newPaid, setNewPaid] = useState(false);
+  const [incomeFlow, setIncomeFlow] = useState(null);
+  const [sourceSheet, setSourceSheet] = useState(false);
+  const [sources, setSources] = useState(() => _saved?.sources ?? DEFAULT_SOURCES);
   function addSource(src) { setSources((p) => [...p, src]); setSourceSheet(false); }
-  // ---- Budget view state ----
-  const [budgetPeriod, setBudgetPeriod] = useState("weekly"); // weekly | biweekly | monthly
+  const [budgetPeriod, setBudgetPeriod] = useState("weekly");
   const [budgetStart, setBudgetStart] = useState(() => startOfPeriod(new Date(), "weekly"));
-  const [budgeted, setBudgeted] = useState(0); // income set for the period
-  const [assigned, setAssigned] = useState({}); // { categoryId: amount }
+  const [budgeted, setBudgeted] = useState(() => _saved?.budgeted ?? 0);
+  const [assigned, setAssigned] = useState(() => _saved?.assigned ?? {});
   function assignTo(catId, amt) { setAssigned((p) => ({ ...p, [catId]: amt })); }
-  // ---- Debts / credit cards / IOUs ----
-  const [debts, setDebts] = useState([]); // {id, kind, name, bank, balance, limit, apr, due}
+  const [debts, setDebts] = useState(() => _saved?.debts ?? []);
   function addDebt(d) { setDebts((p) => [...p, d]); }
   function removeDebt(id) { setDebts((p) => p.filter((x) => x.id !== id)); }
-  // ---- Weather thresholds + Insights overlays ----
   const [thresholds, setThresholds] = useState({ clear: 500, partly: 300, rain: 100, storm: 0 });
   const [showWarnings, setShowWarnings] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => _saved?.darkMode ?? false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [accentColor, setAccentColor] = useState("#0a84ff");
-  const [simplifiedDisplay, setSimplifiedDisplay] = useState(false);
-  const [showProjectedBalances, setShowProjectedBalances] = useState(true);
-  const [morningForecast, setMorningForecast] = useState(true);
-  const [morningTime, setMorningTime] = useState("08:00");
-  const [eveningForecast, setEveningForecast] = useState(true);
-  const [eveningTime, setEveningTime] = useState("18:00");
-  const [paymentReminders, setPaymentReminders] = useState(true);
-  const [reminderTime, setReminderTime] = useState("18:00");
-  const [autoMarkPaid, setAutoMarkPaid] = useState(false);
+  const [accentColor, setAccentColor] = useState(() => _saved?.accentColor ?? "#0a84ff");
+  const [simplifiedDisplay, setSimplifiedDisplay] = useState(() => _saved?.simplifiedDisplay ?? false);
+  const [showProjectedBalances, setShowProjectedBalances] = useState(() => _saved?.showProjectedBalances ?? true);
+  const [morningForecast, setMorningForecast] = useState(() => _saved?.morningForecast ?? true);
+  const [morningTime, setMorningTime] = useState(() => _saved?.morningTime ?? "08:00");
+  const [eveningForecast, setEveningForecast] = useState(() => _saved?.eveningForecast ?? true);
+  const [eveningTime, setEveningTime] = useState(() => _saved?.eveningTime ?? "18:00");
+  const [paymentReminders, setPaymentReminders] = useState(() => _saved?.paymentReminders ?? true);
+  const [reminderTime, setReminderTime] = useState(() => _saved?.reminderTime ?? "18:00");
+  const [autoMarkPaid, setAutoMarkPaid] = useState(() => _saved?.autoMarkPaid ?? false);
   const [showBalancePanel, setShowBalancePanel] = useState(false);
-  // IDs excluded from projections; new accounts are included by default
-  const [excludedAccounts, setExcludedAccounts] = useState(new Set());
+  const [excludedAccounts, setExcludedAccounts] = useState(() => new Set(_saved?.excludedAccounts ?? []));
+  // Auth state
+  const [authUser, setAuthUser] = useState(null); // { uid, displayName, email, photoURL }
+  const [authLoading, setAuthLoading] = useState(FIREBASE_READY);
 
   _simplifiedDisplay = simplifiedDisplay;
+
+  // ── Build the saveable state snapshot ──────────────────────────────────────
+  const appSnap = useMemo(() => ({
+    accounts, txns, debts, assigned, budgeted, sources, activeAccount,
+    excludedAccounts: [...excludedAccounts],
+    darkMode, accentColor, simplifiedDisplay, showProjectedBalances,
+    morningForecast, morningTime, eveningForecast, eveningTime,
+    paymentReminders, reminderTime, autoMarkPaid,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [accounts, txns, debts, assigned, budgeted, sources, activeAccount,
+       excludedAccounts, darkMode, accentColor, simplifiedDisplay,
+       showProjectedBalances, morningForecast, morningTime, eveningForecast,
+       eveningTime, paymentReminders, reminderTime, autoMarkPaid]);
+
+  // Save to localStorage on every change
+  useEffect(() => { saveLS(appSnap); }, [appSnap]);
+
+  // Sync to Firestore (debounced 1.5 s) when signed in
+  useEffect(() => {
+    if (!authUser || !fbDb) return;
+    const t = setTimeout(async () => {
+      try { await setDoc(fbDoc(fbDb, "users", authUser.uid), appSnap); } catch {}
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [appSnap, authUser]); // eslint-disable-line
+
+  // Firebase auth listener
+  useEffect(() => {
+    if (!FIREBASE_READY || !fbAuth) return;
+    setAuthLoading(true);
+    const unsub = onAuthStateChanged(fbAuth, async (u) => {
+      setAuthUser(u ? { uid: u.uid, displayName: u.displayName, email: u.email, photoURL: u.photoURL } : null);
+      if (u && fbDb) {
+        try {
+          const snap = await getDoc(fbDoc(fbDb, "users", u.uid));
+          if (snap.exists()) {
+            const d = snap.data();
+            if (d.accounts)  setAccounts(d.accounts);
+            if (d.txns)      setTxns(d.txns);
+            if (d.debts)     setDebts(d.debts);
+            if (d.assigned)  setAssigned(d.assigned);
+            if (d.budgeted != null)  setBudgeted(d.budgeted);
+            if (d.sources)   setSources(d.sources);
+            if (d.activeAccount) setActiveAccount(d.activeAccount);
+            if (d.excludedAccounts) setExcludedAccounts(new Set(d.excludedAccounts));
+            if (d.darkMode != null) setDarkMode(d.darkMode);
+            if (d.accentColor) setAccentColor(d.accentColor);
+            if (d.simplifiedDisplay != null) setSimplifiedDisplay(d.simplifiedDisplay);
+            if (d.showProjectedBalances != null) setShowProjectedBalances(d.showProjectedBalances);
+          }
+        } catch {}
+      }
+      setAuthLoading(false);
+    });
+    return unsub;
+  }, []); // eslint-disable-line
+
+  const handleSignIn = useCallback(async () => {
+    if (!fbAuth) return;
+    try { await signInWithPopup(fbAuth, new GoogleAuthProvider()); } catch {}
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    if (!fbAuth) return;
+    try { await signOut(fbAuth); } catch {}
+    setAuthUser(null);
+  }, []);
+
+  // ── Full reset ──────────────────────────────────────────────────────────────
+  const doReset = useCallback(() => {
+    setAccounts(DEFAULT_ACCOUNTS);
+    setActiveAccount("acc1");
+    setTxns(seed());
+    setDebts([]);
+    setAssigned({});
+    setBudgeted(0);
+    setSources(DEFAULT_SOURCES);
+    setExcludedAccounts(new Set());
+    clearLS();
+  }, []);
 
   useEffect(() => {
     if (!autoMarkPaid) return;
@@ -255,7 +352,9 @@ export default function CashCycle() {
       {view === "profile" && (
         <ProfileView accounts={accounts} txns={txns} activeAccount={activeAccount}
           onBack={() => setView("calendar")} dm={darkMode}
-          onResetData={() => { setTxns([]); setDebts([]); setAssigned({}); setBudgeted(0); }} />
+          authUser={authUser} authLoading={authLoading}
+          onSignIn={handleSignIn} onSignOut={handleSignOut}
+          onResetData={doReset} />
       )}
       {view === "settings" && (
         <SettingsView
@@ -270,7 +369,7 @@ export default function CashCycle() {
           paymentReminders={paymentReminders} setPaymentReminders={setPaymentReminders}
           reminderTime={reminderTime} setReminderTime={setReminderTime}
           autoMarkPaid={autoMarkPaid} setAutoMarkPaid={setAutoMarkPaid}
-          onResetData={() => { setTxns([]); setDebts([]); setAssigned({}); setBudgeted(0); setExcludedAccounts(new Set()); }}
+          onResetData={doReset}
           onManageCategories={() => setView("stats")}
           onBack={() => setView("calendar")} />
       )}
@@ -2685,12 +2784,13 @@ function ForecastView({ accounts, accTxns, dayMap, balance, onBack, dm }) {
 // ── ProfileView ───────────────────────────────────────────────────────────────
 const PROFILE_ID = "cc_" + Math.random().toString(36).slice(2, 10).toUpperCase();
 
-function ProfileView({ accounts, txns, onBack, dm, onResetData }) {
+function ProfileView({ accounts, txns, onBack, dm, onResetData, authUser, authLoading, onSignIn, onSignOut }) {
   const t = th(dm);
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [logoutConfirm, setLogoutConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
 
   const PRow = ({ icon, label, right, last, onClick, red }) => (
     <div onClick={onClick} style={{ display:"flex", alignItems:"center", gap:14, padding:"16px 18px",
@@ -2701,6 +2801,12 @@ function ProfileView({ accounts, txns, onBack, dm, onResetData }) {
       {right && <span style={{ color:t.text2 }}>{right}</span>}
     </div>
   );
+
+  async function trySignIn() {
+    setSigningIn(true);
+    await onSignIn?.();
+    setSigningIn(false);
+  }
 
   if (showTerms) return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:t.bg }}>
@@ -2753,19 +2859,33 @@ function ProfileView({ accounts, txns, onBack, dm, onResetData }) {
       <div style={{ ...S.bodyScroll, background:t.bg }} className="cc-cal">
         {/* Avatar + name */}
         <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"20px 0 22px" }}>
-          <div style={{ width:72, height:72, borderRadius:36, background:"var(--ac,#0a84ff)",
-                        display:"flex", alignItems:"center", justifyContent:"center",
-                        fontSize:32, fontWeight:800, color:"#fff", marginBottom:12 }}>R</div>
-          <div style={{ fontSize:20, fontWeight:700, color:t.text }}>Guest User</div>
-          <div style={{ fontSize:13, color:t.text2, marginTop:4, display:"flex", alignItems:"center", gap:6 }}>
-            <span>ID: {PROFILE_ID}...</span>
-            <button onClick={()=>navigator.clipboard?.writeText(PROFILE_ID)}
-              style={{ border:"none", background:"transparent", cursor:"pointer", fontSize:14, color:t.text2, padding:0 }}>📋</button>
+          {authUser?.photoURL ? (
+            <img src={authUser.photoURL} alt="" style={{ width:72, height:72, borderRadius:36, objectFit:"cover", marginBottom:12 }} />
+          ) : (
+            <div style={{ width:72, height:72, borderRadius:36, background:"var(--ac,#0a84ff)",
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          fontSize:32, fontWeight:800, color:"#fff", marginBottom:12 }}>
+              {authUser ? (authUser.displayName?.[0]?.toUpperCase() || "G") : "G"}
+            </div>
+          )}
+          <div style={{ fontSize:20, fontWeight:700, color:t.text }}>
+            {authUser ? authUser.displayName : "Guest User"}
           </div>
-          <div style={{ marginTop:8, display:"flex", alignItems:"center", gap:6,
-                        background:t.bg3, borderRadius:20, padding:"4px 12px", fontSize:13, fontWeight:600, color:t.text }}>
-            🇺🇸 US
-          </div>
+          {authUser ? (
+            <div style={{ fontSize:13, color:t.text2, marginTop:4 }}>{authUser.email}</div>
+          ) : (
+            <div style={{ fontSize:13, color:t.text2, marginTop:4, display:"flex", alignItems:"center", gap:6 }}>
+              <span>ID: {PROFILE_ID}...</span>
+              <button onClick={()=>navigator.clipboard?.writeText(PROFILE_ID)}
+                style={{ border:"none", background:"transparent", cursor:"pointer", fontSize:14, color:t.text2, padding:0 }}>📋</button>
+            </div>
+          )}
+          {authUser && (
+            <div style={{ marginTop:8, display:"flex", alignItems:"center", gap:6,
+                          background:"#d6f5e3", borderRadius:20, padding:"4px 14px", fontSize:13, fontWeight:700, color:"#1a6e2e" }}>
+              ☁️ Cloud sync on
+            </div>
+          )}
         </div>
 
         {/* Stats row */}
@@ -2793,11 +2913,40 @@ function ProfileView({ accounts, txns, onBack, dm, onResetData }) {
           </div>
         </div>
 
-        <button style={{ width:"100%", padding:"14px", borderRadius:14, border:`1.5px solid ${t.border}`,
-                         background:"transparent", color:t.text, fontSize:16, fontWeight:700,
-                         cursor:"pointer", marginBottom:20, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-          👤 Create an Account
-        </button>
+        {/* Google Sign-in / account section */}
+        {!authUser ? (
+          <button onClick={trySignIn} disabled={signingIn || authLoading || !FIREBASE_READY}
+            style={{ width:"100%", padding:"14px", borderRadius:14, border:`1.5px solid ${t.border}`,
+                     background:t.bg2, color:t.text, fontSize:16, fontWeight:700,
+                     cursor: FIREBASE_READY ? "pointer" : "default",
+                     marginBottom:20, display:"flex", alignItems:"center", justifyContent:"center", gap:10,
+                     opacity: (signingIn || authLoading) ? 0.6 : 1 }}>
+            {signingIn || authLoading ? (
+              <span style={{ fontSize:14 }}>Connecting…</span>
+            ) : FIREBASE_READY ? (
+              <>
+                <svg width="20" height="20" viewBox="0 0 48 48">
+                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                </svg>
+                Sign in with Google
+              </>
+            ) : (
+              <>👤 Create an Account</>
+            )}
+          </button>
+        ) : (
+          <div style={{ background:t.bg2, borderRadius:14, padding:"14px 18px", marginBottom:20,
+                        display:"flex", alignItems:"center", gap:12 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:13, color:t.text2, fontWeight:600 }}>Signed in</div>
+              <div style={{ fontSize:15, fontWeight:700, color:t.text }}>{authUser.email}</div>
+            </div>
+            <div style={{ fontSize:22 }}>☁️</div>
+          </div>
+        )}
 
         {/* Info rows */}
         <div style={{ borderRadius:16, overflow:"hidden", marginBottom:16 }}>
@@ -2808,7 +2957,7 @@ function ProfileView({ accounts, txns, onBack, dm, onResetData }) {
         </div>
 
         {/* Log Out */}
-        {!logoutConfirm ? (
+        {authUser && (!logoutConfirm ? (
           <div style={{ background:t.bg2, borderRadius:16, padding:"16px", textAlign:"center",
                         cursor:"pointer", marginBottom:10, display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}
                onClick={()=>setLogoutConfirm(true)}>
@@ -2817,17 +2966,17 @@ function ProfileView({ accounts, txns, onBack, dm, onResetData }) {
           </div>
         ) : (
           <div style={{ background:t.bg2, borderRadius:16, padding:16, marginBottom:10 }}>
-            <div style={{ fontSize:14, color:t.text2, textAlign:"center", marginBottom:12 }}>Log out of your account?</div>
+            <div style={{ fontSize:14, color:t.text2, textAlign:"center", marginBottom:12 }}>Log out of your Google account?</div>
             <div style={{ display:"flex", gap:10 }}>
               <button onClick={()=>setLogoutConfirm(false)}
                 style={{ flex:1, padding:12, borderRadius:12, border:`1px solid ${t.border}`,
                          background:"transparent", color:t.text, fontWeight:700, cursor:"pointer" }}>Cancel</button>
-              <button onClick={()=>{ onResetData?.(); setLogoutConfirm(false); onBack(); }}
+              <button onClick={()=>{ onSignOut?.(); setLogoutConfirm(false); onBack(); }}
                 style={{ flex:1, padding:12, borderRadius:12, border:"none",
                          background:"var(--ac,#0a84ff)", color:"#fff", fontWeight:800, cursor:"pointer" }}>Log Out</button>
             </div>
           </div>
-        )}
+        ))}
 
         {/* Delete Account */}
         {!deleteConfirm ? (
@@ -2846,7 +2995,7 @@ function ProfileView({ accounts, txns, onBack, dm, onResetData }) {
               <button onClick={()=>setDeleteConfirm(false)}
                 style={{ flex:1, padding:12, borderRadius:12, border:`1px solid ${t.border}`,
                          background:"transparent", color:t.text, fontWeight:700, cursor:"pointer" }}>Cancel</button>
-              <button onClick={()=>{ onResetData?.(); setDeleteConfirm(false); onBack(); }}
+              <button onClick={()=>{ onResetData?.(); onSignOut?.(); setDeleteConfirm(false); onBack(); }}
                 style={{ flex:1, padding:12, borderRadius:12, border:"none",
                          background:"#ff453a", color:"#fff", fontWeight:800, cursor:"pointer" }}>Delete</button>
             </div>
