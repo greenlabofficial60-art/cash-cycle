@@ -230,17 +230,21 @@ export default function CashCycle() {
   }, []);
 
   // ── Full reset ──────────────────────────────────────────────────────────────
-  const doReset = useCallback(() => {
-    setAccounts(DEFAULT_ACCOUNTS);
+  const doReset = useCallback(async () => {
+    setAccounts([{ id: "acc1", name: "Checking", balance: 0, color: "#0a84ff" }]);
     setActiveAccount("acc1");
-    setTxns(seed());
+    setTxns([]);
     setDebts([]);
     setAssigned({});
     setBudgeted(0);
     setSources(DEFAULT_SOURCES);
     setExcludedAccounts(new Set());
     clearLS();
-  }, []);
+    // Also wipe Firestore doc if signed in
+    if (authUser && fbDb) {
+      try { await setDoc(fbDoc(fbDb, "users", authUser.uid), {}); } catch {}
+    }
+  }, [authUser]); // eslint-disable-line
 
   useEffect(() => {
     if (!autoMarkPaid) return;
@@ -1461,7 +1465,13 @@ function Debts({ debts, addDebt, removeDebt, accounts, setAccounts, txns, setTxn
         onSave={(acc) => { setAccounts((p) => [...p, acc]); setBankSheet(false); }} />}
       {importSheet && <StatementImporter accounts={accounts} activeAccount={activeAccount}
         existingTxns={txns} dm={darkMode} onClose={() => setImportSheet(false)}
-        onImport={(newTxns) => { setTxns(p => [...p, ...newTxns]); setImportSheet(false); }} />}
+        onImport={(newTxns, balanceUpdate) => {
+          setTxns(p => [...p, ...newTxns]);
+          if (balanceUpdate) {
+            setAccounts(p => p.map(a => a.id === balanceUpdate.acctId ? { ...a, balance: balanceUpdate.balance } : a));
+          }
+          setImportSheet(false);
+        }} />}
     </div>
   );
 }
@@ -3187,21 +3197,30 @@ function SettingsView({
 
 // ── merchant → category lookup ───────────────────────────────────────────────
 const MERCHANT_CATS = [
-  [["rent","apartment","landlord","leasing","realty"], "rent"],
-  [["shell","chevron","bp","exxon","mobil","circle k","speedway","gas","fuel"], "car"],
-  [["at&t","verizon","t-mobile","sprint","boost"], "phone"],
-  [["comcast","xfinity","spectrum","cox","internet","cable"], "bills"],
-  [["electric","water bill","utility","pg&e","national grid","con ed"], "bills"],
-  [["mcdonald","burger king","wendy","taco bell","chipotle","subway","kfc","chick-fil"], "food"],
-  [["starbucks","dunkin","peet","coffee","donut"], "food"],
-  [["uber eats","doordash","grubhub","postmates","instacart"], "food"],
-  [["walmart","target","costco","kroger","safeway","whole foods","trader joe","aldi","publix","heb"], "food"],
-  [["netflix","spotify","hulu","disney","apple.com/bill","amazon prime","youtube premium"], "subs"],
-  [["payroll","salary","direct deposit","ach credit","employer","paycheck"], "salary"],
-  [["amazon","ebay","etsy","shopify","online purchase"], "other-out"],
-  [["cvs","walgreens","rite aid","pharmacy"], "other-out"],
-  [["gym","planet fitness","anytime fitness"], "bills"],
-  [["insurance","geico","progressive","state farm","allstate"], "bills"],
+  [["rent","apartment","landlord","leasing","realty","hoa","homeowner"], "rent"],
+  [["shell","chevron","bp","exxon","mobil","mobil","marathon","circle k","speedway","wawa","gas station","fuel","76 ","arco","sunoco","pilot flying","love's travel","ta travel"], "car"],
+  [["car payment","auto loan","toyota financial","honda financial","ford motor credit","bmw financial","ally financial","gm financial","carmax","carvana"], "car"],
+  [["at&t","verizon","t-mobile","sprint","boost mobile","metro pcs","cricket wireless","us cellular","straight talk","mint mobile"], "phone"],
+  [["comcast","xfinity","spectrum","cox","optimum","wow!","internet","cable","dish network","directv","frontier communications"], "bills"],
+  [["electric","water bill","utility","pg&e","national grid","con ed","duke energy","southern company","dominion energy","centerpoint","aps","pse&g","sewage"], "bills"],
+  [["mcdonald","burger king","wendy","taco bell","chipotle","subway","kfc","chick-fil","popeyes","sonic drive","jack in the box","dairy queen","five guys","whataburger","in-n-out","shake shack","domino","pizza hut","little caesar","papa john","panda express","applebee","denny","ihop","olive garden","red lobster","outback","chili's","buffalo wild"], "food"],
+  [["starbucks","dunkin","peet","coffee","donut","dutch bros","caribou coffee","tim horton"], "food"],
+  [["uber eats","doordash","grubhub","postmates","instacart","gopuff","drizly","caviar","seamless"], "food"],
+  [["walmart","target","costco","kroger","safeway","whole foods","trader joe","aldi","publix","heb","food lion","stop & shop","giant food","meijer","winco","sprouts","fresh market","wegmans","winn-dixie","bi-lo","harris teeter"], "food"],
+  [["netflix","spotify","hulu","disney+","apple.com/bill","amazon prime","youtube premium","hbo max","peacock","paramount+","sling tv","fubo tv","crunchyroll","audible","pandora","tidal","deezer"], "subs"],
+  [["payroll","salary","direct deposit","ach credit","employer","paycheck","gusto","adp pay","paychex","workday pay","intuit payroll"], "salary"],
+  [["zelle","venmo","paypal","cash app","square cash","apple pay","google pay"], "other-out"],
+  [["amazon","ebay","etsy","shopify","wayfair","chewy","overstock","wish ","shein","aliexpress","home depot","lowes","best buy","apple store","microsoft store"], "other-out"],
+  [["cvs","walgreens","rite aid","pharmacy","drug store","rx "], "other-out"],
+  [["planet fitness","la fitness","24 hour fitness","anytime fitness","equinox","crunch fitness","gold's gym","lifetime fitness","ymca"], "bills"],
+  [["geico","progressive","state farm","allstate","farmers","liberty mutual","nationwide","usaa insurance","travelers insurance","health insurance","dental insurance","life insurance"], "bills"],
+  [["student loan","sallie mae","navient","fedloan","great lakes","mohela"], "bills"],
+  [["uber ","lyft","bird ","lime ","taxi","cab "], "car"],
+  [["airline","delta","american air","united air","southwest air","spirit air","frontier air","jetblue","air ticket","flight "], "other-out"],
+  [["hotel","marriott","hilton","hyatt","holiday inn","best western","airbnb","vrbo","expedia","booking.com"], "other-out"],
+  [["freelance","consulting","contract pay","1099","invoice paid","client payment"], "freelance"],
+  [["interest earned","dividend","investment","robinhood","coinbase","crypto","stock"], "other-in"],
+  [["refund","return credit","reversal","chargeback"], "other-in"],
 ];
 
 function guessCat(desc) {
@@ -3253,82 +3272,153 @@ async function getPdfJS() {
 async function extractPDFText(arrayBuffer) {
   const pdfjsLib = await getPdfJS();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const lines = [];
+  const allLines = [];
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const content = await page.getTextContent();
+    // Group items by rounded Y, preserving X order within each row
     const byY = {};
     for (const item of content.items) {
-      const y = Math.round(item.transform[5]);
+      if (!item.str) continue;
+      const y = Math.round(item.transform[5] / 3) * 3; // 3pt bucket tolerates minor misalignment
+      const x = item.transform[4];
       if (!byY[y]) byY[y] = [];
-      byY[y].push(item.str);
+      byY[y].push({ t: item.str, x });
     }
-    Object.keys(byY).sort((a, b) => b - a).forEach((y) => {
-      const row = byY[y].join(" ").trim();
-      if (row) lines.push(row);
-    });
+    Object.keys(byY)
+      .sort((a, b) => Number(b) - Number(a))
+      .forEach((y) => {
+        const row = byY[y].sort((a, b) => a.x - b.x).map(i => i.t).join(" ").trim();
+        if (row) allLines.push(row);
+      });
   }
-  return lines;
+  return allLines;
 }
 
 function normalizeDate(s) {
   if (!s) return null;
   s = s.trim().replace(/['"]/g, "");
-  // MM/DD/YYYY or MM-DD-YYYY
-  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (m) return `${m[3]}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}`;
+  // MM/DD/YY or MM/DD/YYYY or MM-DD-YYYY
+  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (m) {
+    let yr = m[3]; if (yr.length === 2) yr = (Number(yr) > 50 ? "19" : "20") + yr;
+    return `${yr}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}`;
+  }
   // YYYY-MM-DD
   m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) return s;
-  // Month DD, YYYY  or  DD Month YYYY
-  m = s.match(/(\w+)\s+(\d{1,2}),?\s+(\d{4})/);
+  // Jan 15, 2024  or  January 15 2024
+  m = s.match(/^([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})$/);
   if (m) {
     const months = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
     const mo = months[m[1].slice(0,3).toLowerCase()];
     if (mo) return `${m[3]}-${String(mo).padStart(2,"0")}-${m[2].padStart(2,"0")}`;
   }
+  // 15 Jan 2024
+  m = s.match(/^(\d{1,2})\s+([A-Za-z]{3,9})\.?\s+(\d{4})$/);
+  if (m) {
+    const months = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+    const mo = months[m[2].slice(0,3).toLowerCase()];
+    if (mo) return `${m[3]}-${String(mo).padStart(2,"0")}-${m[1].padStart(2,"0")}`;
+  }
   const d = new Date(s);
-  if (!isNaN(d)) return dISO(d);
+  if (!isNaN(d.getTime())) return dISO(d);
   return null;
 }
 
+// Parse a raw amount string to a number (handles $1,234.56, (1,234.56), 1,234.56-)
+function parseAmt(s) {
+  if (!s) return null;
+  const neg = s.includes("(") || s.trim().endsWith("-");
+  const n = parseFloat(s.replace(/[$,()\-\s]/g, "").replace(/,/g, ""));
+  if (isNaN(n) || n <= 0) return null;
+  return neg ? -n : n;
+}
+
+// Skip lines that are clearly headers/footers/summaries
+const SKIP_RE = /^(page\s|statement\s|account\s|period\s|beginning balance|ending balance|opening balance|closing balance|total\s|subtotal|transactions for|date\s+description|posting date|transaction date|available balance|rewards|member since|routing|account number)/i;
+
 function parsePDFLines(lines) {
+  const DATE_RE = /\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\b/;
+  const AMT_RE  = /\(?\$?([\d,]+\.\d{2})\)?-?/g;
+  const CREDIT_WORDS = /\b(deposit|credit|payroll|direct dep|refund|cashback|reversal|interest paid|transfer from|payment received|dividend|atm deposit|mobile deposit)\b/i;
+  const DEBIT_WORDS  = /\b(purchase|debit|payment|withdrawal|charge|fee|transfer to|atm withdrawal|pos |check #|zelle sent|overdraft)\b/i;
+
+  const seen = new Set();
   const results = [];
-  const dateRe = /\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\w{3,9}\s+\d{1,2},?\s*\d{4})\b/;
-  const amtRe  = /\$?([\d,]+\.\d{2})/g;
 
   for (const line of lines) {
-    const dm = line.match(dateRe);
+    if (!line || line.length < 8) continue;
+    if (SKIP_RE.test(line.trim())) continue;
+
+    // Must have a date
+    const dm = line.match(DATE_RE);
     if (!dm) continue;
     const dateISO = normalizeDate(dm[1]);
     if (!dateISO) continue;
 
-    const amounts = [];
+    // Collect all numeric amounts on the line
+    const rawAmounts = [];
     let am;
-    const amtRe2 = /\$?([\d,]+\.\d{2})/g;
-    while ((am = amtRe2.exec(line)) !== null) {
-      amounts.push(parseFloat(am[1].replace(/,/g, "")));
+    const amtRe = /\(?\$?([\d,]+\.\d{2})\)?-?/g;
+    while ((am = amtRe.exec(line)) !== null) {
+      const v = parseAmt(am[0]);
+      if (v !== null && Math.abs(v) < 1_000_000) rawAmounts.push({ v: Math.abs(v), raw: am[0] });
     }
-    if (!amounts.length) continue;
+    if (!rawAmounts.length) continue;
 
-    const amount = amounts[amounts.length - 1];
-    if (amount <= 0) continue;
+    // The transaction amount is the SECOND-TO-LAST number when multiple exist
+    // (last is typically the running balance). When only one, use it.
+    const txAmtObj = rawAmounts.length > 1 ? rawAmounts[rawAmounts.length - 2] : rawAmounts[0];
+    const amount = txAmtObj.v;
+    if (!amount || amount <= 0) continue;
 
-    const afterDate = line.slice(dm.index + dm[0].length).trim();
-    const descRaw = afterDate.replace(/\$?[\d,]+\.\d{2}/g, "").replace(/\s+/g, " ").trim();
-    const merchant = descRaw || "Bank Transaction";
+    // Extract description: text between the date and the first dollar amount, cleaned up
+    const dateEnd = dm.index + dm[0].length;
+    const firstAmtIdx = line.search(/\(?\$?[\d,]+\.\d{2}/);
+    let desc = (firstAmtIdx > dateEnd
+      ? line.slice(dateEnd, firstAmtIdx)
+      : line.slice(dateEnd).replace(/\(?\$?[\d,]+\.\d{2}\)?-?/g, "")
+    ).replace(/\s+/g, " ").trim();
 
+    // Clean up common PDF artifacts
+    desc = desc.replace(/\b(debit|credit|purchase|pos|ach|dda)\b/gi, "").replace(/\s{2,}/g, " ").trim();
+    desc = desc.replace(/^[\-\s*#]+|[\-\s*#]+$/g, "").trim();
+    if (!desc || desc.length < 2) desc = "Bank Transaction";
+    if (desc.length > 70) desc = desc.slice(0, 70).trim();
+
+    // Determine income vs expense
     const lo = line.toLowerCase();
-    const isCredit = lo.includes("deposit") || lo.includes("credit") || lo.includes("payroll") || lo.includes("direct dep");
+    const isCredit = CREDIT_WORDS.test(lo) && !DEBIT_WORDS.test(lo);
     const type = isCredit ? "income" : "expense";
-    const category = type === "income" ? "salary" : guessCat(merchant);
+    const category = type === "income" ? (guessCat(desc) === "salary" || /payroll|direct dep|employer/i.test(lo) ? "salary" : "other-in") : guessCat(desc);
+
+    // Deduplicate: same date + rounded amount + first 8 chars of description
+    const key = `${dateISO}|${Math.round(amount * 100)}|${desc.slice(0,8).toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
 
     results.push({
-      id: uid(), date: dateISO, merchant, amount: Math.round(amount * 100) / 100,
-      type, category, name: merchant, status: "paid", frequency: "once"
+      id: uid(), date: dateISO, name: desc, merchant: desc,
+      amount: Math.round(amount * 100) / 100,
+      type, category, status: "paid", frequency: "once"
     });
   }
-  return results;
+
+  // Sort by date descending
+  return results.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+// Detect opening/closing balance from statement for optional account sync
+function detectStatementBalance(lines) {
+  for (const line of lines) {
+    const lo = line.toLowerCase();
+    if (/(ending|closing|new)\s+balance/.test(lo)) {
+      const m = line.match(/\$?([\d,]+\.\d{2})/);
+      if (m) return parseFloat(m[1].replace(/,/g,""));
+    }
+  }
+  return null;
 }
 
 function parseBankCSV(text) {
@@ -3397,6 +3487,8 @@ function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onI
   const [loadMsg, setLoadMsg] = useState("");
   const [selAcct, setSelAcct] = useState(activeAccount);
   const [selected, setSelected] = useState({});
+  const [detectedBalance, setDetectedBalance] = useState(null);
+  const [applyBalance, setApplyBalance] = useState(true);
   const fileRef = useRef(null);
 
   const bg  = dm ? "#1c1c1e" : "#fff";
@@ -3405,7 +3497,7 @@ function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onI
   const txc = dm ? "#f2f2f7" : "#1c1c1e";
   const brd = dm ? "#3a3a3c" : "#e3e3e8";
 
-  function finalize(txns) {
+  function finalize(txns, closingBalance) {
     if (!txns.length) { setError("No transactions found in this file."); setLoading(false); return; }
     const existIds = new Set(existingTxns.map((x) => x.date + "|" + x.amount + "|" + x.name));
     const fresh = txns.filter((t) => !existIds.has(t.date + "|" + t.amount + "|" + t.name));
@@ -3413,6 +3505,8 @@ function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onI
     fresh.forEach((t) => { sel[t.id] = true; });
     setParsed(fresh);
     setSelected(sel);
+    setDetectedBalance(closingBalance ?? null);
+    setApplyBalance(closingBalance != null);
     setImportStep("review");
     setError("");
     setLoading(false);
@@ -3434,7 +3528,8 @@ function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onI
         const lines = await extractPDFText(buf);
         setLoadMsg("Extracting transactions…");
         const txns = parsePDFLines(lines);
-        finalize(txns);
+        const closingBalance = detectStatementBalance(lines);
+        finalize(txns, closingBalance);
       } catch (err) {
         setError("Could not read this PDF. Try exporting as CSV instead.");
         setLoading(false);
@@ -3446,7 +3541,7 @@ function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onI
       reader.onload = (ev) => {
         try {
           const txns = parseBankCSV(ev.target.result);
-          finalize(txns);
+          finalize(txns, null);
         } catch { setError("Could not parse this file."); setLoading(false); }
       };
       reader.readAsText(file);
@@ -3455,7 +3550,8 @@ function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onI
 
   function doImport() {
     const toAdd = parsed.filter((t) => selected[t.id]).map((t) => ({ ...t, account: selAcct }));
-    onImport(toAdd);
+    const balanceUpdate = (applyBalance && detectedBalance != null) ? { acctId: selAcct, balance: detectedBalance } : null;
+    onImport(toAdd, balanceUpdate);
   }
 
   const selCount = Object.values(selected).filter(Boolean).length;
@@ -3525,6 +3621,19 @@ function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onI
           </div>
         ) : (
           <div style={{ flex:1, overflowY:"auto", padding:"0 16px 40px" }}>
+            {detectedBalance != null && (
+              <div onClick={() => setApplyBalance((v) => !v)}
+                style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", background:applyBalance?(dm?"#1a3a1a":"#e8faf0"):bg2, borderRadius:14, marginBottom:14, cursor:"pointer", border:`1px solid ${applyBalance?"#30d158":brd}` }}>
+                <div style={{ fontSize:22 }}>🏦</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:txc }}>Set account balance to {fmtFull(detectedBalance)}</div>
+                  <div style={{ fontSize:12, color:tx2 }}>Closing balance from your statement</div>
+                </div>
+                <div style={{ width:28, height:28, borderRadius:14, border:`2px solid ${applyBalance?"#30d158":brd}`, background:applyBalance?"#30d158":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  {applyBalance && <span style={{ color:"#fff", fontSize:14, fontWeight:900 }}>✓</span>}
+                </div>
+              </div>
+            )}
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
               <div style={{ fontSize:14, color:tx2 }}>{parsed.length} transaction{parsed.length !== 1 ? "s" : ""} found</div>
               <button onClick={() => {
