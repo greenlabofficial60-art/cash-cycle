@@ -219,8 +219,17 @@ export default function CashCycle() {
   }, []); // eslint-disable-line
 
   const handleSignIn = useCallback(async () => {
-    if (!fbAuth) return;
-    try { await signInWithPopup(fbAuth, new GoogleAuthProvider()); } catch {}
+    if (!fbAuth) return null;
+    try {
+      await signInWithPopup(fbAuth, new GoogleAuthProvider());
+      return null;
+    } catch (e) {
+      const code = e?.code || "";
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return null;
+      if (code === "auth/popup-blocked") return "Popup blocked — please allow popups for this site in your browser settings.";
+      if (code === "auth/unauthorized-domain") return "Sign-in not enabled for this domain yet.";
+      return "Sign-in failed. Please try again.";
+    }
   }, []);
 
   const handleSignOut = useCallback(async () => {
@@ -2801,6 +2810,7 @@ function ProfileView({ accounts, txns, onBack, dm, onResetData, authUser, authLo
   const [logoutConfirm, setLogoutConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
+  const [signInError, setSignInError] = useState("");
 
   const PRow = ({ icon, label, right, last, onClick, red }) => (
     <div onClick={onClick} style={{ display:"flex", alignItems:"center", gap:14, padding:"16px 18px",
@@ -2814,7 +2824,9 @@ function ProfileView({ accounts, txns, onBack, dm, onResetData, authUser, authLo
 
   async function trySignIn() {
     setSigningIn(true);
-    await onSignIn?.();
+    setSignInError("");
+    const err = await onSignIn?.();
+    if (err) setSignInError(err);
     setSigningIn(false);
   }
 
@@ -2924,6 +2936,11 @@ function ProfileView({ accounts, txns, onBack, dm, onResetData, authUser, authLo
         </div>
 
         {/* Google Sign-in / account section */}
+        {signInError && (
+          <div style={{ background:"#fde7e7", borderRadius:12, padding:"10px 14px", marginBottom:12, fontSize:13, color:"#c0392b", fontWeight:600, textAlign:"center" }}>
+            {signInError}
+          </div>
+        )}
         {!authUser ? (
           <button onClick={trySignIn} disabled={signingIn || authLoading || !FIREBASE_READY}
             style={{ width:"100%", padding:"14px", borderRadius:14, border:`1.5px solid ${t.border}`,

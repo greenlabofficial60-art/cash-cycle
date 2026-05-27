@@ -32,7 +32,7 @@ let _db   = null;
 if (FIREBASE_READY) {
   const app = initializeApp(FIREBASE_CONFIG);
   _auth = getAuth(app);
-  _db   = getFirestore(app);
+  _db   = getFirestore(app, "default");
 }
 
 export const fbAuth = _auth;
