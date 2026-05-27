@@ -3356,10 +3356,19 @@ function parseAmt(s) {
 const SKIP_RE = /^(page\s|statement\s|account\s|period\s|beginning balance|ending balance|opening balance|closing balance|total\s|subtotal|transactions for|date\s+description|posting date|transaction date|available balance|rewards|member since|routing|account number)/i;
 
 function parsePDFLines(lines) {
-  const DATE_RE = /\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\b/;
+  // Full date: MM/DD/YY(YY) or MM-DD-YY(YY). Partial: MM/DD or MM-DD at start of line.
+  const DATE_FULL_RE    = /\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\b/;
+  const DATE_PARTIAL_RE = /^(\d{1,2}[\/\-]\d{1,2})\b/;
   const AMT_RE  = /\(?\$?([\d,]+\.\d{2})\)?-?/g;
   const CREDIT_WORDS = /\b(deposit|credit|payroll|direct dep|refund|cashback|reversal|interest paid|transfer from|payment received|dividend|atm deposit|mobile deposit)\b/i;
   const DEBIT_WORDS  = /\b(purchase|debit|payment|withdrawal|charge|fee|transfer to|atm withdrawal|pos |check #|zelle sent|overdraft)\b/i;
+
+  // Infer statement year: find the most-recent full year referenced in any line
+  let stmtYear = new Date().getFullYear();
+  for (const line of lines) {
+    const m = line.match(/\b(20\d{2})\b/);
+    if (m) { stmtYear = parseInt(m[1], 10); break; }
+  }
 
   const seen = new Set();
   const results = [];
@@ -3368,10 +3377,23 @@ function parsePDFLines(lines) {
     if (!line || line.length < 8) continue;
     if (SKIP_RE.test(line.trim())) continue;
 
-    // Must have a date
-    const dm = line.match(DATE_RE);
-    if (!dm) continue;
-    const dateISO = normalizeDate(dm[1]);
+    // Must have a date — prefer full date, fall back to MM/DD at line start
+    let dateISO = null;
+    let dateMatchEnd = 0;
+    const fullM = line.match(DATE_FULL_RE);
+    if (fullM) {
+      dateISO = normalizeDate(fullM[1]);
+      dateMatchEnd = fullM.index + fullM[0].length;
+    } else {
+      const partM = line.match(DATE_PARTIAL_RE);
+      if (partM) {
+        const [mo, dy] = partM[1].split(/[\/\-]/).map(Number);
+        if (mo >= 1 && mo <= 12 && dy >= 1 && dy <= 31) {
+          dateISO = `${stmtYear}-${String(mo).padStart(2,"0")}-${String(dy).padStart(2,"0")}`;
+          dateMatchEnd = partM[0].length;
+        }
+      }
+    }
     if (!dateISO) continue;
 
     // Collect all numeric amounts on the line
@@ -3391,7 +3413,7 @@ function parsePDFLines(lines) {
     if (!amount || amount <= 0) continue;
 
     // Extract description: text between the date and the first dollar amount, cleaned up
-    const dateEnd = dm.index + dm[0].length;
+    const dateEnd = dateMatchEnd;
     const firstAmtIdx = line.search(/\(?\$?[\d,]+\.\d{2}/);
     let desc = (firstAmtIdx > dateEnd
       ? line.slice(dateEnd, firstAmtIdx)
@@ -3400,7 +3422,7 @@ function parsePDFLines(lines) {
 
     // Clean up common PDF artifacts
     desc = desc.replace(/\b(debit|credit|purchase|pos|ach|dda)\b/gi, "").replace(/\s{2,}/g, " ").trim();
-    desc = desc.replace(/^[\-\s*#]+|[\-\s*#]+$/g, "").trim();
+    desc = desc.replace(/^[\-\s*#+]+|[\-\s*#+]+$/g, "").trim();
     if (!desc || desc.length < 2) desc = "Bank Transaction";
     if (desc.length > 70) desc = desc.slice(0, 70).trim();
 
