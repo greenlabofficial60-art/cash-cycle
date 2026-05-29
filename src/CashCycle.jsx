@@ -255,24 +255,35 @@ export default function CashCycle() {
     }
   }, [authUser]); // eslint-disable-line
 
+  // Use functional updater so txns is NOT a dependency — avoids running on every txns change
   useEffect(() => {
     if (!autoMarkPaid) return;
     const today = todayISO();
-    const needsMark = txns.some(tx => tx.type === "expense" && tx.date < today && tx.status !== "paid");
-    if (!needsMark) return;
-    setTxns(p => p.map(tx =>
-      tx.type === "expense" && tx.date < today && tx.status !== "paid"
-        ? { ...tx, status: "paid" }
-        : tx
-    ));
-  }, [autoMarkPaid, txns]); // eslint-disable-line
+    setTxns(p => {
+      const needsMark = p.some(tx => tx.type === "expense" && tx.date < today && tx.status !== "paid");
+      if (!needsMark) return p;
+      return p.map(tx =>
+        tx.type === "expense" && tx.date < today && tx.status !== "paid"
+          ? { ...tx, status: "paid" }
+          : tx
+      );
+    });
+  }, [autoMarkPaid]); // eslint-disable-line
 
   const acc = accounts.find((a) => a.id === activeAccount);
-  // included = every account not in the excluded set
-  const includedIds = accounts.map(a => a.id).filter(id => !excludedAccounts.has(id));
-  const totalBalance = accounts.filter(a => includedIds.includes(a.id)).reduce((s, a) => s + a.balance, 0);
-  // project using all included accounts' transactions
-  const accTxns = txns.filter((x) => includedIds.includes(x.account));
+
+  const includedIds = useMemo(
+    () => accounts.map(a => a.id).filter(id => !excludedAccounts.has(id)),
+    [accounts, excludedAccounts]
+  );
+  const totalBalance = useMemo(
+    () => accounts.filter(a => includedIds.includes(a.id)).reduce((s, a) => s + a.balance, 0),
+    [accounts, includedIds]
+  );
+  const accTxns = useMemo(
+    () => txns.filter((x) => includedIds.includes(x.account)),
+    [txns, includedIds]
+  );
 
   const { dayMap, lowest, end } = useMemo(() => {
     const start = new Date(todayISO() + "T00:00:00");
@@ -310,13 +321,21 @@ export default function CashCycle() {
     return { dayMap: map, lowest, end };
   }, [accTxns, totalBalance]); // eslint-disable-line
 
-  const forecast = buildForecastSentence(accTxns, totalBalance, dayMap, thresholds);
+  const forecast = useMemo(
+    () => buildForecastSentence(accTxns, totalBalance, dayMap, thresholds),
+    [accTxns, totalBalance, dayMap, thresholds] // eslint-disable-line
+  );
 
-  function saveTx(tx) {
+  const onTapTxCb = useCallback((tx) => { setEditing(tx); setSheet(true); }, []);
+  const onEditWarningsCb = useCallback(() => setShowWarnings(true), []);
+
+  const saveTx = useCallback((tx) => {
     setTxns((p) => (p.some((x) => x.id === tx.id) ? p.map((x) => (x.id === tx.id ? tx : x)) : [...p, tx]));
     setSheet(false); setEditing(null);
-  }
-  function delTx(id) { setTxns((p) => p.filter((x) => x.id !== id)); setSheet(false); setEditing(null); }
+  }, []);
+  const delTx = useCallback((id) => {
+    setTxns((p) => p.filter((x) => x.id !== id)); setSheet(false); setEditing(null);
+  }, []);
 
   return (
     <div style={{ ...S.root, "--ac": accentColor }} className={darkMode ? "dm" : ""}>
@@ -340,8 +359,8 @@ export default function CashCycle() {
 
       {view === "calendar" && (
         <Calendar dayMap={dayMap} forecast={forecast} end={end}
-          onTapTx={(tx) => { setEditing(tx); setSheet(true); }}
-          onEditWarnings={() => setShowWarnings(true)}
+          onTapTx={onTapTxCb}
+          onEditWarnings={onEditWarningsCb}
           showProjectedBalances={showProjectedBalances} />
       )}
       {view === "stats" && (
@@ -719,7 +738,7 @@ function Insights({ accounts, accTxns, dayMap, balance, onClose }) {
   );
 }
 
-function Calendar({ dayMap, forecast, end, onTapTx, onEditWarnings, showProjectedBalances = true }) {
+const Calendar = React.memo(function Calendar({ dayMap, forecast, end, onTapTx, onEditWarnings, showProjectedBalances = true }) {
   const scrollRef = useRef(null);
 
   const weeks = useMemo(() => {
@@ -817,7 +836,7 @@ function Calendar({ dayMap, forecast, end, onTapTx, onEditWarnings, showProjecte
       </div>
     </div>
   );
-}
+});
 
 // ============================================================================
 // ============================================================================
