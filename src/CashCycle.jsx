@@ -1486,10 +1486,10 @@ function Debts({ debts, addDebt, removeDebt, accounts, setAccounts, txns, setTxn
       </button>
       <button onClick={() => setImportSheet(true)}
         style={{ ...S.btnGhostFull, marginTop: 10, borderColor: "#0a84ff", color: "#0a84ff" }}>
-        📥 Import bank statement (CSV)
+        📥 Import bank statement (PDF or CSV)
       </button>
       <div style={{ fontSize: 13, color: "#8e8e93", textAlign: "center", marginTop: 8, lineHeight: 1.4 }}>
-        Download your statement from your bank's website as a CSV file, then import it here. Works with Chase, Bank of America, Wells Fargo, Citi, Capital One and more.
+        Download your monthly PDF statement or export a CSV from your bank's website. Works with Chase, Bank of America, Wells Fargo, Citi, Capital One and more.
       </div>
       <div style={{ height: 120 }} />
 
