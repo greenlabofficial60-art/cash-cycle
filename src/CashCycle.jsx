@@ -787,7 +787,7 @@ const Calendar = React.memo(function Calendar({ dayMap, forecast, end, onTapTx, 
       <div ref={scrollRef} onScroll={onScroll} className="cc-cal" style={S.calScroll}>
         <div style={{ height: 30 }} />
         {weeks.map((week, wi) => (
-          <div key={wi} style={S.weekRow}>
+          <div key={wi} style={S.weekRow} className="cc-week-row">
             {week.map((day) => {
               const key = dISO(day);
               const info = dayMap[key];
@@ -800,7 +800,7 @@ const Calendar = React.memo(function Calendar({ dayMap, forecast, end, onTapTx, 
                     {isToday ? (
                       <span style={S.todayCircle}>{day.getDate()}</span>
                     ) : (
-                      <span style={{ fontSize: 15, fontWeight: 600, color: "#1c1c1e" }}>
+                      <span style={{ fontSize: 15, fontWeight: 600 }}>
                         {isFirst ? `${MONTHS[day.getMonth()].slice(0, 3)} 1` : day.getDate()}
                       </span>
                     )}
@@ -2531,6 +2531,8 @@ const CSS = `
   .dm .cc-addopt { background: #1c1c1e !important; color: #f2f2f7 !important; }
   /* Grabber */
   .dm .cc-grabber { background: #3a3a3c !important; }
+  .dm .cc-cal .cc-week-row { border-top-color: #2c2c2e !important; }
+  .dm .cc-cal > div > div { border-right-color: #2c2c2e !important; }
 `;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
