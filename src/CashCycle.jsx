@@ -539,7 +539,7 @@ function WeatherWarnings({ thresholds, onClose, onSave }) {
 
   return (
     <div className="cc-overlay" style={S.overlay} onClick={onClose}>
-      <div className="cc-sheet" style={{ ...S.detailSheet, background: "#fff" }} onClick={(e) => e.stopPropagation()}>
+      <div className="cc-sheet" style={S.detailSheet} onClick={(e) => e.stopPropagation()}>
         <div style={S.grabber} />
         <div style={{ display: "flex", alignItems: "flex-start", padding: "4px 0 12px" }}>
           <div style={{ flex: 1 }}>
@@ -628,11 +628,11 @@ function Insights({ accounts, accTxns, dayMap, balance, onClose }) {
 
   return (
     <div className="cc-overlay" style={{ ...S.overlay, alignItems: "stretch" }} onClick={onClose}>
-      <div className="cc-sheet" style={{ ...S.detailSheet, background: "#fff", maxHeight: "100%", borderRadius: 0 }} onClick={(e) => e.stopPropagation()}>
+      <div className="cc-sheet" style={{ ...S.detailSheet, maxHeight: "100%", borderRadius: 0 }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", padding: "10px 2px 14px" }}>
           <button onClick={onClose} style={S.iconBtn}>✕</button>
           <div style={{ flex: 1, textAlign: "center", fontSize: 22, fontWeight: 800 }}>Insights</div>
-          <span style={{ ...S.editPill, color: "#1c1c1e", background: "#f2f2f7" }}>✎ Edit</span>
+          <span style={S.editPill}>✎ Edit</span>
         </div>
 
         <div style={S.detailBody} className="cc-cal">
@@ -663,7 +663,7 @@ function Insights({ accounts, accTxns, dayMap, balance, onClose }) {
                 const on = selected.includes(a.id);
                 return (
                   <button key={a.id} onClick={() => toggle(a.id)} style={{ ...S.acctChip,
-                    border: on ? "1.5px solid #0a84ff" : "1.5px solid #e3e3e8", color: "#1c1c1e" }}>
+                    border: on ? "1.5px solid #0a84ff" : "1.5px solid var(--cc-border)", color: "var(--cc-text)" }}>
                     <span style={{ color: on ? "#0a84ff" : "#c7c7cc" }}>{on ? "✓" : "○"}</span>
                     {a.name === "Savings" ? "💰" : "🏦"} {a.name} <b>{fmtK(a.balance)}</b>
                   </button>
@@ -943,10 +943,10 @@ function BudgetView({ accTxns, acc, period, setPeriod, start, setStart, budgeted
       {/* summary cards */}
       <div style={{ display: "flex", gap: 10 }}>
         <button onClick={() => setBudgetEdit(true)} style={{ ...S.sumCard, background: "#e8f0fe" }}>
-          <div style={{ fontSize: 13, color: "#3a3a3c", fontWeight: 700 }}>Budgeted</div>
+          <div style={{ fontSize: 13, color: "var(--cc-text)", fontWeight: 700 }}>Budgeted</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: "#0a84ff" }}>{fmtK(budgeted)}</div>
         </button>
-        <div style={{ ...S.sumCard, background: "#f2f2f7" }}>
+        <div style={{ ...S.sumCard, background: "var(--cc-bg3)" }}>
           <div style={{ fontSize: 13, color: "#8e8e93", fontWeight: 700 }}>Assigned</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: "#8e8e93" }}>{fmtK(totalAssigned)}</div>
         </div>
@@ -992,11 +992,11 @@ function BudgetView({ accTxns, acc, period, setPeriod, start, setStart, budgeted
             <div key={c.id} style={S.catRow}>
               <div style={{ ...S.catTile, background: c.bg }}>{c.icon}</div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 19, fontWeight: 800, color: "#3a3a3c" }}>{c.label}</div>
+                <div style={{ fontSize: 19, fontWeight: 800, color: "var(--cc-text)" }}>{c.label}</div>
                 <div style={{ fontSize: 14, color: "#8e8e93", marginTop: 4 }}>{fmtK(pl)} planned</div>
               </div>
               <button onClick={() => setEditingCat(c.id)} style={{ ...S.assignPill,
-                background: a > 0 ? "#0a84ff" : "#f2f2f7", color: a > 0 ? "#fff" : "#8e8e93" }}>
+                background: a > 0 ? "#0a84ff" : "var(--cc-bg3)", color: a > 0 ? "#fff" : "#8e8e93" }}>
                 {fmtK(a)}
               </button>
             </div>
@@ -1040,8 +1040,8 @@ function PeriodPicker({ current, onClose, onPick }) {
             const active = p.id === current;
             return (
               <button key={p.id} onClick={() => onPick(p.id)}
-                style={{ ...S.periodCard, border: active ? "2px solid #5e7cf5" : "1px solid #e3e3e8",
-                  background: active ? "#f5f7ff" : "#fff" }}>
+                style={{ ...S.periodCard, border: active ? "2px solid #5e7cf5" : "1px solid var(--cc-border)",
+                  background: active ? "#f5f7ff" : "var(--cc-bg)" }}>
                 <span style={{ width: 50, height: 50, borderRadius: 25, background: p.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>{p.icon}</span>
                 <div style={{ flex: 1, textAlign: "left" }}>
                   <div style={{ fontSize: 19, fontWeight: 800 }}>{p.label}</div>
@@ -1164,7 +1164,7 @@ function AmountPrompt({ title, subtitle, value, balance, context, onClose, onSav
         <div style={S.keypad}>
           {keys.map((k) => (
             <button key={k} onClick={() => press(k)} style={{
-              ...S.key, color: isOp(k) ? "#0a84ff" : k === "C" ? "#8e8e93" : "#1c1c1e",
+              ...S.key, color: isOp(k) ? "#0a84ff" : k === "C" ? "#8e8e93" : "var(--cc-text)",
             }}>{k}</button>
           ))}
         </div>
@@ -1240,7 +1240,7 @@ function Ledger({ accounts, setAccounts, txns }) {
           const active = id === tab;
           return (
             <button key={t} data-tab={id} onClick={() => selectTab(id)}
-              style={{ ...S.ledgerTab, color: active ? "#1c1c1e" : "#b0b0b5" }}>
+              style={{ ...S.ledgerTab, color: active ? "var(--cc-text)" : "#b0b0b5" }}>
               {t}
               {active && <div style={S.ledgerUnderline} />}
             </button>
@@ -1251,7 +1251,7 @@ function Ledger({ accounts, setAccounts, txns }) {
       <div style={{ flex: 1, overflowY: "auto" }} className="cc-cal">
         {tab === "balances" && <BalancesTab accounts={accounts} setAccounts={setAccounts} />}
         {tab === "history" && <LedgerList title="Recent activity" rows={[...incomeTx, ...expenseTx].slice(0, 30).map((x) => ({
-          left: x.name, right: (x.type === "income" ? "+" : "-") + fmtFull(x.amount), color: x.type === "income" ? "#30a85f" : "#1c1c1e",
+          left: x.name, right: (x.type === "income" ? "+" : "-") + fmtFull(x.amount), color: x.type === "income" ? "#30a85f" : "var(--cc-text)",
         }))} />}
         {tab === "income" && <LedgerTable cols={["SOURCE", "MONTHLY", "FREQ"]} rows={incomeTx.map((x) => [x.name, fmtFull(x.amount * (perMonth[x.frequency] || 0)), FREQ_LABEL[x.frequency] || "—"])} footer={["Total /mo", fmtFull(monthly(incomeTx)), ""]} />}
         {tab === "expenses" && <LedgerTable cols={["EXPENSE", "MONTHLY", "FREQ"]} rows={expenseTx.map((x) => [x.name, fmtFull(x.amount * (perMonth[x.frequency] || 0)), FREQ_LABEL[x.frequency] || "—"])} footer={["Total /mo", fmtFull(monthly(expenseTx)), ""]} />}
@@ -1328,16 +1328,16 @@ function LedgerTable({ cols, rows, footer }) {
             {r.map((cell, ci) => (
               <div key={ci} style={{ flex: ci === 0 ? 2 : 1, textAlign: ci === 0 ? "left" : "right",
                 fontSize: ci === 0 ? 17 : 15, fontWeight: ci === 0 ? 700 : 600,
-                color: ci === 0 ? "#1c1c1e" : "#3a3a3c", minWidth: 0, overflow: "hidden",
+                color: ci === 0 ? "var(--cc-text)" : "var(--cc-text2)", minWidth: 0, overflow: "hidden",
                 textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cell}</div>
             ))}
           </div>
         ))}
         {footer && rows.length > 0 && (
-          <div style={{ ...S.ledgerRow, borderTop: "1px solid #e3e3e8", background: "#fafafa" }}>
+          <div style={{ ...S.ledgerRow, borderTop: "1px solid var(--cc-border)", background: "var(--cc-bg2)" }}>
             {footer.map((cell, ci) => (
               <div key={ci} style={{ flex: ci === 0 ? 2 : 1, textAlign: ci === 0 ? "left" : "right",
-                fontSize: 15, fontWeight: 800, color: "#1c1c1e", minWidth: 0 }}>{cell}</div>
+                fontSize: 15, fontWeight: 800, color: "var(--cc-text)", minWidth: 0 }}>{cell}</div>
             ))}
           </div>
         )}
@@ -1352,7 +1352,7 @@ function LedgerList({ title, rows }) {
       <div style={{ fontSize: 13, fontWeight: 800, color: "#8e8e93", letterSpacing: 0.5, margin: "8px 0" }}>{title.toUpperCase()}</div>
       {rows.length === 0 && <div style={{ color: "#8e8e93", padding: 10 }}>No activity yet.</div>}
       {rows.map((r, i) => (
-        <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "13px 2px", borderBottom: "0.5px solid #f0f0f0" }}>
+        <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "13px 2px", borderBottom: "0.5px solid var(--cc-div)" }}>
           <span style={{ fontWeight: 600 }}>{r.left}</span>
           <span style={{ fontWeight: 800, color: r.color }}>{r.right}</span>
         </div>
@@ -1419,16 +1419,16 @@ function Debts({ debts, addDebt, removeDebt, accounts, setAccounts, txns, setTxn
       <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
         <SummaryMini label="Total owed" value={fmtK(debts.reduce((s, d) => s + (d.balance || 0), 0))} bg="#fde7e7" color="#c0392b" />
         <SummaryMini label="Cards" value={String(cards.length)} bg="#e8f0fe" color="#0a84ff" />
-        <SummaryMini label="Limit" value={totalLimit ? fmtK(totalLimit) : "--"} bg="#f2f2f7" color="#3a3a3c" />
+        <SummaryMini label="Limit" value={totalLimit ? fmtK(totalLimit) : "--"} bg="var(--cc-bg3)" color="var(--cc-text)" />
       </div>
 
       {/* segmented control */}
       <div style={S.debtSeg}>
         {DEBT_TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{ ...S.debtSegBtn,
-            background: tab === t.id ? "#fff" : "transparent",
+            background: tab === t.id ? "var(--cc-bg)" : "transparent",
             boxShadow: tab === t.id ? "0 1px 4px rgba(0,0,0,.12)" : "none",
-            color: tab === t.id ? "#1c1c1e" : "#8e8e93" }}>
+            color: tab === t.id ? "var(--cc-text)" : "#8e8e93" }}>
             {t.label}
           </button>
         ))}
@@ -1439,7 +1439,7 @@ function Debts({ debts, addDebt, removeDebt, accounts, setAccounts, txns, setTxn
         {list.length === 0 ? (
           <div style={{ textAlign: "center", padding: "30px 16px", color: "#8e8e93" }}>
             <div style={{ fontSize: 36, marginBottom: 10 }}>{kind === "card" ? "💳" : kind === "loan" ? "🏦" : "🤝"}</div>
-            <div style={{ fontWeight: 700, color: "#3a3a3c" }}>No {labels[kind]}s yet</div>
+            <div style={{ fontWeight: 700, color: "var(--cc-text)" }}>No {labels[kind]}s yet</div>
             <div style={{ fontSize: 14, marginTop: 4 }}>Tap the + button below to add one</div>
           </div>
         ) : (
@@ -1465,7 +1465,7 @@ function Debts({ debts, addDebt, removeDebt, accounts, setAccounts, txns, setTxn
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#8e8e93", marginBottom: 4 }}>
                       <span>{fmtK(d.balance)} of {fmtK(d.limit)}</span><span>{u}% used</span>
                     </div>
-                    <div style={{ height: 7, background: "#eee", borderRadius: 4, overflow: "hidden" }}>
+                    <div style={{ height: 7, background: "var(--cc-bg3)", borderRadius: 4, overflow: "hidden" }}>
                       <div style={{ width: `${Math.min(100, u)}%`, height: "100%", background: u < 30 ? "#30d158" : u < 70 ? "#ff9f0a" : "#ff453a" }} />
                     </div>
                   </div>
@@ -1805,7 +1805,7 @@ function IncomeSheet({ accounts, activeAccount, editing, flow, sources, onOpenSo
 
   return (
     <div className="cc-overlay" style={S.overlay} onClick={onClose}>
-      <div className="cc-sheet" style={{ ...S.detailSheet, background: received ? "#fff" : "#f7f7f8" }} onClick={(e) => e.stopPropagation()}>
+      <div className="cc-sheet" style={S.detailSheet} onClick={(e) => e.stopPropagation()}>
         <div style={S.grabber} />
         <div style={S.detailHead}>
           <div style={{ ...S.avatar, background: "#bde8c8" }}>💰</div>
@@ -1924,13 +1924,13 @@ function IncomeSheet({ accounts, activeAccount, editing, flow, sources, onOpenSo
               <Row label="Ends" stack>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button onClick={() => setEndsMode("ondate")} style={{ ...S.endsBtn,
-                    background: endsMode === "ondate" ? "#30d158" : "#fff", color: endsMode === "ondate" ? "#fff" : "#1c1c1e" }}>On date</button>
+                    background: endsMode === "ondate" ? "#30d158" : "var(--cc-bg)", color: endsMode === "ondate" ? "#fff" : "var(--cc-text)" }}>On date</button>
                   <button onClick={() => setEndsMode("aftern")} style={{ ...S.endsBtn,
-                    background: endsMode === "aftern" ? "#30d158" : "#fff", color: endsMode === "aftern" ? "#fff" : "#1c1c1e" }}>After N</button>
+                    background: endsMode === "aftern" ? "#30d158" : "var(--cc-bg)", color: endsMode === "aftern" ? "#fff" : "var(--cc-text)" }}>After N</button>
                 </div>
                 {endsMode === "ondate" ? (
                   <label style={{ ...S.boxInput, display: "block", position: "relative", cursor: "pointer", textAlign: "center" }}>
-                    <span style={{ fontWeight: 600, color: endDate ? "#1c1c1e" : "#b0b0b5" }}>
+                    <span style={{ fontWeight: 600, color: endDate ? "var(--cc-text)" : "#b0b0b5" }}>
                       {endDate ? new Date(endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "None"}
                     </span>
                     <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={S.hiddenDate} />
@@ -2166,13 +2166,13 @@ function TxSheet({ accounts, activeAccount, editing, initialType, initialPaid, i
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               {["off", "0", "1", "3", "7"].map((n) => (
                 <button key={n} onClick={() => setNotify(n)} style={{ ...S.notifChip,
-                  background: notify === n ? "#0a84ff" : "#fff",
-                  color: notify === n ? "#fff" : "#1c1c1e",
-                  border: notify === n ? "none" : "1px solid #e3e3e8" }}>
+                  background: notify === n ? "#0a84ff" : "var(--cc-bg)",
+                  color: notify === n ? "#fff" : "var(--cc-text)",
+                  border: notify === n ? "none" : "1px solid var(--cc-border)" }}>
                   {n === "off" ? "Off" : n}
                 </button>
               ))}
-              <span style={{ fontSize: 16, fontWeight: 600, color: "#1c1c1e" }}>days</span>
+              <span style={{ fontSize: 16, fontWeight: 600, color: "var(--cc-text)" }}>days</span>
             </div>
           </Row>
 
@@ -2263,9 +2263,9 @@ function Row({ label, children, stack, align }) {
     <div style={{
       display: "flex", flexDirection: stack ? "column" : "row",
       alignItems: stack ? "stretch" : align === "center" ? "center" : "flex-start",
-      gap: stack ? 6 : 12, padding: "8px 0", borderBottom: "0.5px solid #f0f0f0",
+      gap: stack ? 6 : 12, padding: "8px 0", borderBottom: "0.5px solid var(--cc-div)",
     }}>
-      <div style={{ width: stack ? "auto" : 98, flexShrink: 0, fontSize: 15, fontWeight: 800, color: "#1c1c1e", lineHeight: 1.15 }}>
+      <div style={{ width: stack ? "auto" : 98, flexShrink: 0, fontSize: 15, fontWeight: 800, color: "var(--cc-text)", lineHeight: 1.15 }}>
         {label}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
@@ -2377,16 +2377,16 @@ const S = {
   },
   statusBar: { display: "none" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 16px 10px", paddingTop: "max(16px, env(safe-area-inset-top))" },
-  iconBtn: { width: 40, height: 40, borderRadius: 20, border: "none", background: "#f2f2f7", fontSize: 17, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
+  iconBtn: { width: 40, height: 40, borderRadius: 20, border: "none", background: "var(--cc-bg3)", fontSize: 17, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
   bannerWrap: { padding: "0 12px 8px" },
   banner: { display: "flex", gap: 12, alignItems: "flex-start", borderRadius: 14, padding: "12px 14px" },
-  editPill: { fontSize: 13, fontWeight: 700, color: "#1a8a4a", background: "#fff", borderRadius: 12, padding: "4px 12px", alignSelf: "flex-start" },
+  editPill: { fontSize: 13, fontWeight: 700, color: "#1a8a4a", background: "var(--cc-bg3)", borderRadius: 12, padding: "4px 12px", alignSelf: "flex-start" },
   dowRow: { display: "grid", gridTemplateColumns: "repeat(7,1fr)", padding: "0 4px" },
   dowCell: { textAlign: "center", fontSize: 13, fontWeight: 600, color: "#8e8e93", padding: "2px 0" },
   monthChip: { position: "absolute", left: "50%", transform: "translateX(-50%)", top: 4, zIndex: 5, background: "#fff", boxShadow: "0 2px 10px rgba(0,0,0,.12)", borderRadius: 18, padding: "7px 16px", fontWeight: 700, fontSize: 15 },
   calScroll: { flex: 1, overflowY: "auto", padding: "0 2px" },
-  weekRow: { display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderTop: "0.5px solid #eee", minHeight: 110 },
-  dayCell: { borderRight: "0.5px solid #f0f0f0", padding: "4px 2px", display: "flex", flexDirection: "column", gap: 3, minHeight: 110 },
+  weekRow: { display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderTop: "0.5px solid var(--cc-div)", minHeight: 110 },
+  dayCell: { borderRight: "0.5px solid var(--cc-div)", padding: "4px 2px", display: "flex", flexDirection: "column", gap: 3, minHeight: 110 },
   dateNumWrap: { display: "flex", justifyContent: "center", marginBottom: 2 },
   todayCircle: { background: "#0a84ff", color: "#fff", width: 26, height: 26, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14 },
   balPill: { alignSelf: "center", background: "#eaeaef", borderRadius: 9, padding: "2px 7px", fontSize: 12, fontWeight: 700, color: "#3a3a3c" },
@@ -2394,94 +2394,112 @@ const S = {
   toolbarWrap: { position: "absolute", bottom: "max(22px, env(safe-area-inset-bottom))", left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 40, pointerEvents: "none" },
   addOverlay: { position: "absolute", inset: 0, bottom: 0, background: "rgba(0,0,0,.04)", zIndex: 45, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 92, pointerEvents: "auto" },
   addMenu: { display: "flex", flexDirection: "column", gap: 14, width: "78%", maxWidth: 300 },
-  addOpt: { display: "flex", alignItems: "center", gap: 18, background: "#fbfbfd", border: "none", borderRadius: 40, padding: "16px 26px", cursor: "pointer", boxShadow: "0 6px 20px rgba(0,0,0,.14)" },
+  addOpt: { display: "flex", alignItems: "center", gap: 18, background: "var(--cc-bg2)", border: "none", borderRadius: 40, padding: "16px 26px", cursor: "pointer", boxShadow: "0 6px 20px rgba(0,0,0,.14)" },
   toolbar: { display: "flex", alignItems: "center", gap: 6, background: "rgba(245,245,247,.92)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 34, padding: "8px 14px", boxShadow: "0 8px 30px rgba(0,0,0,.18)", pointerEvents: "auto" },
   tbtn: { width: 44, height: 44, borderRadius: 22, border: "none", background: "transparent", fontSize: 20, cursor: "pointer" },
   plus: { width: 54, height: 54, borderRadius: 27, border: "none", background: "#0a84ff", color: "#fff", fontSize: 30, fontWeight: 300, cursor: "pointer", margin: "0 2px", boxShadow: "0 6px 18px rgba(10,132,255,.45)", transition: "transform .22s cubic-bezier(.2,.8,.2,1)", lineHeight: 1 },
   statusBtn: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 12, padding: "12px", cursor: "pointer" },
   bodyScroll: { flex: 1, overflowY: "auto", padding: "4px 16px" },
   periodRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, margin: "6px 0 4px" },
-  periodArrow: { flex: 1, border: "none", background: "transparent", fontSize: 15, fontWeight: 800, color: "#1c1c1e", cursor: "pointer", whiteSpace: "nowrap" },
-  periodPill: { border: "1px solid #e3e3e8", background: "#fff", borderRadius: 22, padding: "8px 14px", fontSize: 15, fontWeight: 800, cursor: "pointer", color: "#1c1c1e", whiteSpace: "nowrap" },
+  periodArrow: { flex: 1, border: "none", background: "transparent", fontSize: 15, fontWeight: 800, color: "var(--cc-text)", cursor: "pointer", whiteSpace: "nowrap" },
+  periodPill: { border: "1px solid var(--cc-border)", background: "var(--cc-bg)", borderRadius: 22, padding: "8px 14px", fontSize: 15, fontWeight: 800, cursor: "pointer", color: "var(--cc-text)", whiteSpace: "nowrap" },
   sumCard: { flex: 1, border: "none", borderRadius: 16, padding: "12px 10px", textAlign: "center", cursor: "pointer" },
   budgetPrompt: { display: "flex", alignItems: "center", gap: 12, width: "100%", background: "#e8f0fe", border: "1px solid #bcd6fb", borderRadius: 16, padding: "14px 16px", marginTop: 14, cursor: "pointer" },
-  catRow: { display: "flex", alignItems: "center", gap: 14, padding: "14px 2px", borderBottom: "0.5px solid #f0f0f0" },
+  catRow: { display: "flex", alignItems: "center", gap: 14, padding: "14px 2px", borderBottom: "0.5px solid var(--cc-div)" },
   catTile: { width: 52, height: 52, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, flexShrink: 0 },
   assignPill: { border: "none", borderRadius: 18, padding: "8px 18px", fontSize: 16, fontWeight: 800, cursor: "pointer", flexShrink: 0 },
-  ledgerTabs: { display: "flex", gap: 22, overflowX: "auto", padding: "8px 18px 0", borderBottom: "0.5px solid #eee", flexShrink: 0, cursor: "grab", userSelect: "none", touchAction: "pan-x" },
+  ledgerTabs: { display: "flex", gap: 22, overflowX: "auto", padding: "8px 18px 0", borderBottom: "0.5px solid var(--cc-div)", flexShrink: 0, cursor: "grab", userSelect: "none", touchAction: "pan-x" },
   ledgerTab: { position: "relative", border: "none", background: "transparent", fontSize: 19, fontWeight: 700, padding: "6px 0 12px", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 },
   ledgerUnderline: { position: "absolute", left: 0, right: 0, bottom: 0, height: 3, borderRadius: 2, background: "#0a84ff" },
-  ledgerHead: { display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", background: "#f7f7f8", fontSize: 14, fontWeight: 800, color: "#8e8e93", letterSpacing: 0.5 },
-  ledgerRow: { display: "flex", alignItems: "center", gap: 12, padding: "16px 18px", borderBottom: "0.5px solid #f0f0f0" },
-  ledgerBalInput: { width: 90, textAlign: "right", border: "none", background: "transparent", fontSize: 18, fontWeight: 800, outline: "none", color: "#1c1c1e", padding: 0 },
-  debtSeg: { display: "flex", background: "#f2f2f7", borderRadius: 14, padding: 4, gap: 4 },
+  ledgerHead: { display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", background: "var(--cc-bg2)", fontSize: 14, fontWeight: 800, color: "#8e8e93", letterSpacing: 0.5 },
+  ledgerRow: { display: "flex", alignItems: "center", gap: 12, padding: "16px 18px", borderBottom: "0.5px solid var(--cc-div)" },
+  ledgerBalInput: { width: 90, textAlign: "right", border: "none", background: "transparent", fontSize: 18, fontWeight: 800, outline: "none", color: "var(--cc-text)", padding: 0 },
+  debtSeg: { display: "flex", background: "var(--cc-bg3)", borderRadius: 14, padding: 4, gap: 4 },
   debtSegBtn: { flex: 1, border: "none", borderRadius: 11, padding: "11px 6px", fontSize: 15, fontWeight: 800, cursor: "pointer" },
-  debtCard: { background: "#fff", border: "0.5px solid #e3e3e8", borderRadius: 16, padding: 14, marginBottom: 12, boxShadow: "0 1px 4px rgba(0,0,0,.05)" },
+  debtCard: { background: "var(--cc-bg)", border: "0.5px solid var(--cc-border)", borderRadius: 16, padding: 14, marginBottom: 12, boxShadow: "0 1px 4px rgba(0,0,0,.05)" },
   debtRemove: { marginTop: 10, border: "none", background: "transparent", color: "#ff453a", fontWeight: 700, fontSize: 13, cursor: "pointer", padding: 0 },
-  btnGhostFull: { width: "100%", marginTop: 10, padding: 13, borderRadius: 14, border: "1px solid #e3e3e8", background: "#fff", color: "#1c1c1e", fontWeight: 700, fontSize: 15, cursor: "pointer" },
+  btnGhostFull: { width: "100%", marginTop: 10, padding: 13, borderRadius: 14, border: "1px solid var(--cc-border)", background: "var(--cc-bg)", color: "var(--cc-text)", fontWeight: 700, fontSize: 15, cursor: "pointer" },
   warnSave: { border: "none", background: "#0a84ff", color: "#fff", borderRadius: 20, padding: "9px 22px", fontSize: 16, fontWeight: 800, cursor: "pointer" },
   suggestedPill: { display: "inline-block", background: "#e3f7e8", color: "#1a8a4a", borderRadius: 18, padding: "7px 16px", fontSize: 15, fontWeight: 800 },
   thresholdSlider: { width: "100%", height: 8, cursor: "pointer" },
-  insightCard: { background: "#f7f7f8", borderRadius: 18, padding: 18, marginBottom: 16 },
-  acctChip: { display: "flex", alignItems: "center", gap: 5, background: "#fff", borderRadius: 20, padding: "7px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" },
-  calcSheet: { width: "100%", maxHeight: "94%", background: "#fff", borderRadius: "20px 20px 0 0", display: "flex", flexDirection: "column", overflow: "hidden" },
-  calcHead: { display: "flex", alignItems: "center", gap: 10, padding: "16px 18px 12px", borderBottom: "0.5px solid #eee" },
-  calcTip: { display: "flex", alignItems: "center", gap: 10, background: "#f7f7f8", padding: "12px 18px" },
-  calcTotalRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", padding: "16px 18px", borderBottom: "0.5px solid #eee" },
-  balChip: { alignSelf: "flex-start", background: "#f2f2f7", borderRadius: 20, padding: "8px 16px", margin: "14px 18px 4px", fontSize: 15, fontWeight: 700, color: "#3a3a3c" },
+  insightCard: { background: "var(--cc-bg2)", borderRadius: 18, padding: 18, marginBottom: 16 },
+  acctChip: { display: "flex", alignItems: "center", gap: 5, background: "var(--cc-bg)", borderRadius: 20, padding: "7px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" },
+  calcSheet: { width: "100%", maxHeight: "94%", background: "var(--cc-bg)", borderRadius: "20px 20px 0 0", display: "flex", flexDirection: "column", overflow: "hidden" },
+  calcHead: { display: "flex", alignItems: "center", gap: 10, padding: "16px 18px 12px", borderBottom: "0.5px solid var(--cc-div)" },
+  calcTip: { display: "flex", alignItems: "center", gap: 10, background: "var(--cc-bg2)", padding: "12px 18px" },
+  calcTotalRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", padding: "16px 18px", borderBottom: "0.5px solid var(--cc-div)" },
+  balChip: { alignSelf: "flex-start", background: "var(--cc-bg3)", borderRadius: 20, padding: "8px 16px", margin: "14px 18px 4px", fontSize: 15, fontWeight: 700, color: "var(--cc-text)" },
   keypad: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", padding: "4px 10px" },
   key: { border: "none", background: "transparent", fontSize: 28, fontWeight: 600, padding: "16px 0", cursor: "pointer" },
   calcFooter: { display: "flex", alignItems: "center", gap: 12, padding: "4px 18px 10px" },
   backKey: { border: "none", background: "transparent", color: "#0a84ff", fontSize: 24, cursor: "pointer", padding: "8px 10px" },
   doneBtn: { flex: 1, background: "#5e7cf5", border: "none", color: "#fff", borderRadius: 26, padding: "16px", fontSize: 19, fontWeight: 800, cursor: "pointer" },
   periodCard: { display: "flex", alignItems: "center", gap: 14, width: "100%", borderRadius: 16, padding: "14px 16px", marginBottom: 12, cursor: "pointer" },
-  confirmCard: { width: "100%", maxWidth: 360, background: "#fff", borderRadius: 20, padding: "22px 22px 20px" },
-  confirmCancel: { flex: 1, border: "1px solid #e3e3e8", background: "#fff", borderRadius: 14, padding: "14px", fontSize: 16, fontWeight: 700, color: "#6a6a6e", cursor: "pointer" },
+  confirmCard: { width: "100%", maxWidth: 360, background: "var(--cc-bg)", borderRadius: 20, padding: "22px 22px 20px" },
+  confirmCancel: { flex: 1, border: "1px solid var(--cc-border)", background: "var(--cc-bg)", borderRadius: 14, padding: "14px", fontSize: 16, fontWeight: 700, color: "var(--cc-text2)", cursor: "pointer" },
   confirmGo: { flex: 2, border: "none", background: "#5e7cf5", color: "#fff", borderRadius: 14, padding: "14px", fontSize: 16, fontWeight: 800, cursor: "pointer" },
   h2: { fontSize: 22, fontWeight: 800, margin: "10px 4px 10px" },
-  statCard: { background: "#f7f7fa", borderRadius: 16, padding: 14 },
-  inlineInput: { width: 90, textAlign: "right", border: "1px solid #e3e3e8", borderRadius: 8, padding: "5px 8px", fontWeight: 700, outline: "none" },
-  fullInput: { width: "100%", border: "1px solid #e3e3e8", borderRadius: 10, padding: "11px 12px", fontSize: 16, outline: "none", boxSizing: "border-box" },
+  statCard: { background: "var(--cc-bg2)", borderRadius: 16, padding: 14 },
+  inlineInput: { width: 90, textAlign: "right", border: "1px solid var(--cc-border)", borderRadius: 8, padding: "5px 8px", fontWeight: 700, outline: "none" },
+  fullInput: { width: "100%", border: "1px solid var(--cc-border)", borderRadius: 10, padding: "11px 12px", fontSize: 16, outline: "none", boxSizing: "border-box" },
   primaryBtn: { width: "100%", marginTop: 10, padding: 12, borderRadius: 12, border: "none", background: "#0a84ff", color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer" },
   overlay: { position: "absolute", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 60, display: "flex", alignItems: "flex-end" },
-  detailSheet: { width: "100%", maxHeight: "96%", background: "#f7f7f8", borderRadius: "24px 24px 0 0", padding: "6px 18px 0", display: "flex", flexDirection: "column", overflow: "hidden" },
+  detailSheet: { width: "100%", maxHeight: "96%", background: "var(--cc-bg2)", borderRadius: "24px 24px 0 0", padding: "6px 18px 0", display: "flex", flexDirection: "column", overflow: "hidden" },
   detailHead: { display: "flex", alignItems: "center", gap: 10, padding: "4px 0 6px" },
   avatar: { width: 38, height: 38, borderRadius: 19, background: "#d8c4b0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, flexShrink: 0 },
-  closeX: { width: 30, height: 30, border: "none", background: "transparent", fontSize: 19, color: "#1c1c1e", cursor: "pointer" },
+  closeX: { width: 30, height: 30, border: "none", background: "transparent", fontSize: 19, color: "var(--cc-text)", cursor: "pointer" },
   detailBody: { flex: 1, overflowY: "auto", paddingBottom: 4 },
-  rowInput: { width: "100%", border: "none", background: "transparent", fontSize: 15, fontWeight: 600, outline: "none", textAlign: "left", color: "#1c1c1e" },
-  amountRowInput: { border: "none", background: "transparent", fontSize: 16, fontWeight: 700, outline: "none", width: 110, color: "#1c1c1e" },
+  rowInput: { width: "100%", border: "none", background: "transparent", fontSize: 15, fontWeight: 600, outline: "none", textAlign: "left", color: "var(--cc-text)" },
+  amountRowInput: { border: "none", background: "transparent", fontSize: 16, fontWeight: 700, outline: "none", width: 110, color: "var(--cc-text)" },
   hiddenDate: { position: "absolute", inset: 0, opacity: 0, width: "100%", height: "100%", cursor: "pointer" },
-  pillSelect: { border: "1px solid #e3e3e8", background: "#fff", borderRadius: 10, padding: "6px 12px", fontSize: 14, fontWeight: 600, outline: "none", cursor: "pointer", color: "#1c1c1e" },
+  pillSelect: { border: "1px solid var(--cc-border)", background: "var(--cc-bg)", borderRadius: 10, padding: "6px 12px", fontSize: 14, fontWeight: 600, outline: "none", cursor: "pointer", color: "var(--cc-text)" },
   notifChip: { minWidth: 34, padding: "5px 8px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" },
-  selectorBtn: { display: "flex", alignItems: "center", gap: 8, width: "100%", border: "none", background: "transparent", padding: 0, cursor: "pointer", color: "#1c1c1e" },
-  budgetBtn: { display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", background: "#fff", borderRadius: 12, padding: "8px 12px", cursor: "pointer", boxShadow: "0 1px 3px rgba(0,0,0,.06)", color: "#1c1c1e" },
+  selectorBtn: { display: "flex", alignItems: "center", gap: 8, width: "100%", border: "none", background: "transparent", padding: 0, cursor: "pointer", color: "var(--cc-text)" },
+  budgetBtn: { display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", background: "var(--cc-bg)", borderRadius: 12, padding: "8px 12px", cursor: "pointer", boxShadow: "0 1px 3px rgba(0,0,0,.06)", color: "var(--cc-text)" },
   budgetIconCircle: { width: 30, height: 30, borderRadius: 15, background: "#ece3da", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 },
-  dropdown: { background: "#fff", borderRadius: 12, boxShadow: "0 4px 16px rgba(0,0,0,.12)", overflow: "hidden", marginBottom: 4 },
-  dropItem: { display: "block", width: "100%", textAlign: "left", border: "none", background: "transparent", padding: "10px 14px", fontSize: 14, cursor: "pointer", borderBottom: "0.5px solid #f0f0f0", color: "#1c1c1e" },
+  dropdown: { background: "var(--cc-bg)", borderRadius: 12, boxShadow: "0 4px 16px rgba(0,0,0,.22)", overflow: "hidden", marginBottom: 4 },
+  dropItem: { display: "block", width: "100%", textAlign: "left", border: "none", background: "transparent", padding: "10px 14px", fontSize: 14, cursor: "pointer", borderBottom: "0.5px solid var(--cc-div)", color: "var(--cc-text)" },
   iconAdd: { width: 38, height: 38, borderRadius: 19, border: "2px dashed #0a84ff", color: "#0a84ff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 },
-  iconCircle: { width: 38, height: 38, borderRadius: 19, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, cursor: "pointer", flexShrink: 0 },
-  saveBtn: { width: "100%", padding: 13, borderRadius: 14, border: "none", background: "#1c1c1e", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", margin: "4px 0 10px" },
-  boxInput: { width: "100%", border: "1px solid #e3e3e8", background: "#fff", borderRadius: 12, padding: "12px 14px", fontSize: 15, fontWeight: 600, outline: "none", boxSizing: "border-box", color: "#1c1c1e" },
-  boxInputBtn: { width: "100%", border: "1px solid #e3e3e8", background: "#fff", borderRadius: 12, padding: "10px 14px", fontSize: 15, fontWeight: 600, outline: "none", boxSizing: "border-box", color: "#1c1c1e", textAlign: "left", cursor: "pointer" },
-  sourcePill: { display: "flex", alignItems: "center", gap: 10, width: "100%", border: "1px solid #e3e3e8", background: "#fff", borderRadius: 30, padding: "8px 12px", cursor: "pointer", color: "#1c1c1e" },
-  amountBox: { display: "flex", alignItems: "center", gap: 8, border: "1px solid #e3e3e8", background: "#fff", borderRadius: 12, padding: "8px 14px" },
-  miniPill: { border: "1px solid #e3e3e8", background: "#fff", borderRadius: 10, padding: "7px 12px", fontSize: 14, fontWeight: 700, color: "#1c1c1e" },
-  endsBtn: { flex: 1, border: "1px solid #e3e3e8", borderRadius: 10, padding: "9px", fontSize: 14, fontWeight: 800, cursor: "pointer" },
-  sheet: { width: "100%", maxHeight: "92%", background: "#fff", borderRadius: "20px 20px 0 0", padding: "8px 18px 0", overflowY: "auto" },
+  iconCircle: { width: 38, height: 38, borderRadius: 19, background: "var(--cc-bg3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, cursor: "pointer", flexShrink: 0 },
+  saveBtn: { width: "100%", padding: 13, borderRadius: 14, border: "none", background: "var(--cc-text)", color: "var(--cc-bg)", fontSize: 16, fontWeight: 800, cursor: "pointer", margin: "4px 0 10px" },
+  boxInput: { width: "100%", border: "1px solid var(--cc-border)", background: "var(--cc-bg)", borderRadius: 12, padding: "12px 14px", fontSize: 15, fontWeight: 600, outline: "none", boxSizing: "border-box", color: "var(--cc-text)" },
+  boxInputBtn: { width: "100%", border: "1px solid var(--cc-border)", background: "var(--cc-bg)", borderRadius: 12, padding: "10px 14px", fontSize: 15, fontWeight: 600, outline: "none", boxSizing: "border-box", color: "var(--cc-text)", textAlign: "left", cursor: "pointer" },
+  sourcePill: { display: "flex", alignItems: "center", gap: 10, width: "100%", border: "1px solid var(--cc-border)", background: "var(--cc-bg)", borderRadius: 30, padding: "8px 12px", cursor: "pointer", color: "var(--cc-text)" },
+  amountBox: { display: "flex", alignItems: "center", gap: 8, border: "1px solid var(--cc-border)", background: "var(--cc-bg)", borderRadius: 12, padding: "8px 14px" },
+  miniPill: { border: "1px solid var(--cc-border)", background: "var(--cc-bg)", borderRadius: 10, padding: "7px 12px", fontSize: 14, fontWeight: 700, color: "var(--cc-text)" },
+  endsBtn: { flex: 1, border: "1px solid var(--cc-border)", borderRadius: 10, padding: "9px", fontSize: 14, fontWeight: 800, cursor: "pointer" },
+  sheet: { width: "100%", maxHeight: "92%", background: "var(--cc-bg)", borderRadius: "20px 20px 0 0", padding: "8px 18px 0", overflowY: "auto" },
   grabber: { width: 36, height: 5, borderRadius: 3, background: "#d1d1d6", margin: "6px auto 10px" },
   sheetHead: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   sheetCancel: { border: "none", background: "none", color: "#0a84ff", fontSize: 16, cursor: "pointer" },
   sheetSave: { border: "none", background: "none", color: "#0a84ff", fontSize: 16, fontWeight: 700, cursor: "pointer" },
-  segment: { display: "flex", background: "#f2f2f7", borderRadius: 10, padding: 3, gap: 3 },
+  segment: { display: "flex", background: "var(--cc-bg3)", borderRadius: 10, padding: 3, gap: 3 },
   segBtn: { flex: 1, border: "none", padding: 9, borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer" },
-  amountInput: { fontSize: 42, fontWeight: 700, border: "none", outline: "none", width: 170, textAlign: "center", background: "transparent", color: "#1c1c1e" },
-  sheetInput: { width: "100%", border: "none", background: "#f2f2f7", borderRadius: 10, padding: 12, fontSize: 16, outline: "none", boxSizing: "border-box" },
+  amountInput: { fontSize: 42, fontWeight: 700, border: "none", outline: "none", width: 170, textAlign: "center", background: "transparent", color: "var(--cc-text)" },
+  sheetInput: { width: "100%", border: "none", background: "var(--cc-bg3)", borderRadius: 10, padding: 12, fontSize: 16, outline: "none", boxSizing: "border-box" },
   chip: { display: "flex", alignItems: "center", gap: 4, border: "none", borderRadius: 18, padding: "8px 13px", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0 },
   deleteBtn: { width: "100%", marginTop: 14, padding: 13, borderRadius: 12, border: "none", background: "#ffeaea", color: "#ff453a", fontWeight: 700, fontSize: 15, cursor: "pointer" },
 };
 
 const CSS = `
+  :root {
+    --cc-bg:     #fff;
+    --cc-bg2:    #f7f7f8;
+    --cc-bg3:    #f2f2f7;
+    --cc-text:   #1c1c1e;
+    --cc-text2:  #6a6a6e;
+    --cc-border: #e3e3e8;
+    --cc-div:    #f0f0f0;
+  }
+  .dm {
+    --cc-bg:     #111;
+    --cc-bg2:    #1c1c1e;
+    --cc-bg3:    #2c2c2e;
+    --cc-text:   #f2f2f7;
+    --cc-text2:  #aeaeb2;
+    --cc-border: #3a3a3c;
+    --cc-div:    #2c2c2e;
+  }
   .cc-cal::-webkit-scrollbar, .cc-hscroll::-webkit-scrollbar { display:none; }
   .cc-cal, .cc-hscroll { scrollbar-width:none; }
   .cc-sheet { animation: up .28s cubic-bezier(.2,.8,.2,1); }
