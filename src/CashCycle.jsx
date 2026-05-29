@@ -1502,7 +1502,13 @@ function Debts({ debts, addDebt, removeDebt, accounts, setAccounts, txns, setTxn
         onImport={(newTxns, balanceUpdate) => {
           setTxns(p => [...p, ...newTxns]);
           if (balanceUpdate) {
-            setAccounts(p => p.map(a => a.id === balanceUpdate.acctId ? { ...a, balance: balanceUpdate.balance } : a));
+            setAccounts(p => p.map(a => {
+              if (a.id !== balanceUpdate.acctId) return a;
+              const newBal = balanceUpdate.balance != null
+                ? balanceUpdate.balance
+                : a.balance + (balanceUpdate.netDelta ?? 0);
+              return { ...a, balance: Math.round(newBal * 100) / 100 };
+            }));
           }
           setImportSheet(false);
         }} />}
@@ -3537,7 +3543,11 @@ function parseBankCSV(text) {
     if (amount <= 0) continue;
 
     const merchant = rawDesc.replace(/['"]/g, "").trim() || "Unknown";
-    const category = type === "income" ? "salary" : guessCat(merchant);
+    const category = type === "income"
+      ? (/payroll|direct.?dep|employer|salary|paycheck/i.test(merchant) ? "salary"
+        : /freelance|consult|1099|contract/i.test(merchant) ? "freelance"
+        : "other-in")
+      : guessCat(merchant);
     results.push({ id: uid(), date: dateISO, merchant, amount: Math.round(amount * 100) / 100, type, category, name: merchant, status: "paid", frequency: "once" });
   }
   return results;
@@ -3553,6 +3563,7 @@ function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onI
   const [selected, setSelected] = useState({});
   const [detectedBalance, setDetectedBalance] = useState(null);
   const [applyBalance, setApplyBalance] = useState(true);
+  const [autoNetBalance, setAutoNetBalance] = useState(true);
   const fileRef = useRef(null);
 
   const bg  = dm ? "#1c1c1e" : "#fff";
@@ -3614,11 +3625,21 @@ function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onI
 
   function doImport() {
     const toAdd = parsed.filter((t) => selected[t.id]).map((t) => ({ ...t, account: selAcct }));
-    const balanceUpdate = (applyBalance && detectedBalance != null) ? { acctId: selAcct, balance: detectedBalance } : null;
+    let balanceUpdate = null;
+    if (applyBalance && detectedBalance != null) {
+      balanceUpdate = { acctId: selAcct, balance: detectedBalance };
+    } else if (autoNetBalance && selCount > 0) {
+      const netDelta = toAdd.reduce((s, t) => s + (t.type === "income" ? t.amount : -t.amount), 0);
+      balanceUpdate = { acctId: selAcct, netDelta };
+    }
     onImport(toAdd, balanceUpdate);
   }
 
   const selCount = Object.values(selected).filter(Boolean).length;
+  const selTxns = parsed.filter((t) => selected[t.id]);
+  const incomeTotal = selTxns.reduce((s, t) => t.type === "income" ? s + t.amount : s, 0);
+  const expenseTotal = selTxns.reduce((s, t) => t.type === "expense" ? s + t.amount : s, 0);
+  const netImpact = incomeTotal - expenseTotal;
 
   return (
     <div className="cc-overlay" style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", display:"flex", flexDirection:"column", justifyContent:"flex-end", zIndex:200 }} onClick={onClose}>
@@ -3695,6 +3716,43 @@ function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onI
                 </div>
                 <div style={{ width:28, height:28, borderRadius:14, border:`2px solid ${applyBalance?"#30d158":brd}`, background:applyBalance?"#30d158":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                   {applyBalance && <span style={{ color:"#fff", fontSize:14, fontWeight:900 }}>✓</span>}
+                </div>
+              </div>
+            )}
+            {selCount > 0 && (
+              <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+                {incomeTotal > 0 && (
+                  <div style={{ flex:1, background:dm?"#1a3a1a":"#e8faf0", borderRadius:12, padding:"10px 10px", textAlign:"center" }}>
+                    <div style={{ fontSize:11, color:"#30d158", fontWeight:700, letterSpacing:0.5 }}>INCOME</div>
+                    <div style={{ fontSize:15, fontWeight:800, color:"#30d158" }}>+{fmtFull(incomeTotal)}</div>
+                  </div>
+                )}
+                {expenseTotal > 0 && (
+                  <div style={{ flex:1, background:dm?"#3a1a1a":"#fde8e8", borderRadius:12, padding:"10px 10px", textAlign:"center" }}>
+                    <div style={{ fontSize:11, color:"#ff3b30", fontWeight:700, letterSpacing:0.5 }}>EXPENSES</div>
+                    <div style={{ fontSize:15, fontWeight:800, color:"#ff3b30" }}>-{fmtFull(expenseTotal)}</div>
+                  </div>
+                )}
+                <div style={{ flex:1, background:bg2, borderRadius:12, padding:"10px 10px", textAlign:"center" }}>
+                  <div style={{ fontSize:11, color:tx2, fontWeight:700, letterSpacing:0.5 }}>NET</div>
+                  <div style={{ fontSize:15, fontWeight:800, color:netImpact >= 0 ? "#30d158" : "#ff3b30" }}>
+                    {netImpact >= 0 ? "+" : ""}{fmtFull(netImpact)}
+                  </div>
+                </div>
+              </div>
+            )}
+            {detectedBalance == null && selCount > 0 && (
+              <div onClick={() => setAutoNetBalance(v => !v)}
+                style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", background:autoNetBalance?(dm?"#1a2a3a":"#e8f4ff"):bg2, borderRadius:14, marginBottom:14, cursor:"pointer", border:`1px solid ${autoNetBalance?"#0a84ff":brd}` }}>
+                <div style={{ fontSize:22 }}>⚖️</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:txc }}>
+                    {netImpact >= 0 ? "Add" : "Deduct"} {fmtFull(Math.abs(netImpact))} {netImpact >= 0 ? "to" : "from"} balance
+                  </div>
+                  <div style={{ fontSize:12, color:tx2 }}>Auto-calculated from {selCount} transaction{selCount !== 1 ? "s" : ""}</div>
+                </div>
+                <div style={{ width:28, height:28, borderRadius:14, border:`2px solid ${autoNetBalance?"#0a84ff":brd}`, background:autoNetBalance?"#0a84ff":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  {autoNetBalance && <span style={{ color:"#fff", fontSize:14, fontWeight:900 }}>✓</span>}
                 </div>
               </div>
             )}
