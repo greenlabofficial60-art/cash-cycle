@@ -381,7 +381,7 @@ export default function CashCycle() {
       {view === "debts" && (
         <Debts debts={debts} addDebt={addDebt} removeDebt={removeDebt}
           accounts={accounts} setAccounts={setAccounts}
-          txns={txns} setTxns={setTxns} activeAccount={activeAccount} />
+          txns={txns} setTxns={setTxns} activeAccount={activeAccount} dm={darkMode} />
       )}
       {view === "forecast" && (
         <ForecastView accounts={accounts} accTxns={accTxns} dayMap={dayMap}
@@ -1378,7 +1378,7 @@ const DEBT_TABS = [
   { id: "ious", label: "IOUs", kind: "iou" },
 ];
 
-function Debts({ debts, addDebt, removeDebt, accounts, setAccounts, txns, setTxns, activeAccount }) {
+function Debts({ debts, addDebt, removeDebt, accounts, setAccounts, txns, setTxns, activeAccount, dm }) {
   const [tab, setTab] = useState("cards");
   const [sheet, setSheet] = useState(false);
   const [bankSheet, setBankSheet] = useState(false);
@@ -1498,7 +1498,7 @@ function Debts({ debts, addDebt, removeDebt, accounts, setAccounts, txns, setTxn
       {bankSheet && <AddBankSheet onClose={() => setBankSheet(false)}
         onSave={(acc) => { setAccounts((p) => [...p, acc]); setBankSheet(false); }} />}
       {importSheet && <StatementImporter accounts={accounts} activeAccount={activeAccount}
-        existingTxns={txns} dm={darkMode} onClose={() => setImportSheet(false)}
+        existingTxns={txns} dm={dm} onClose={() => setImportSheet(false)}
         onImport={(newTxns, balanceUpdate) => {
           setTxns(p => [...p, ...newTxns]);
           if (balanceUpdate) {
