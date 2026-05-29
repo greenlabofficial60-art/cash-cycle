@@ -277,24 +277,30 @@ export default function CashCycle() {
   const { dayMap, lowest, end } = useMemo(() => {
     const start = new Date(todayISO() + "T00:00:00");
     const end = new Date(start); end.setMonth(end.getMonth() + 6);
-    const events = [];
+    // Build O(1) lookup maps keyed by date string
+    const eventsByDay = new Map();
+    const goalsByDay  = new Map();
     for (const tx of accTxns) {
-      if (tx.type === "goal") continue;
-      for (const d of occurrences(tx, start, end))
-        events.push({ key: dISO(d), amount: tx.type === "income" ? tx.amount : -tx.amount, tx });
+      const isGoal = tx.type === "goal";
+      for (const d of occurrences(tx, start, end)) {
+        const key = dISO(d);
+        if (isGoal) {
+          if (!goalsByDay.has(key)) goalsByDay.set(key, []);
+          goalsByDay.get(key).push(tx);
+        } else {
+          if (!eventsByDay.has(key)) eventsByDay.set(key, []);
+          eventsByDay.get(key).push({ amount: tx.type === "income" ? tx.amount : -tx.amount, tx });
+        }
+      }
     }
-    const goalEvents = [];
-    for (const tx of accTxns.filter((x) => x.type === "goal"))
-      for (const d of occurrences(tx, start, end))
-        goalEvents.push({ key: dISO(d), tx });
     const map = {};
     let bal = totalBalance;
     const cur = new Date(start);
     let lowest = { value: bal, date: new Date(start) };
     while (cur <= end) {
       const key = dISO(cur);
-      const todays = events.filter((e) => e.key === key);
-      const goalsToday = goalEvents.filter((e) => e.key === key).map((e) => e.tx);
+      const todays    = eventsByDay.get(key) ?? [];
+      const goalsToday = goalsByDay.get(key) ?? [];
       let changed = false;
       for (const e of todays) { bal += e.amount; changed = true; }
       if (bal < lowest.value) lowest = { value: bal, date: new Date(cur) };
