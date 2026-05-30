@@ -286,8 +286,9 @@ export default function CashCycle() {
   );
 
   const { dayMap, lowest, end } = useMemo(() => {
-    const start = new Date(todayISO() + "T00:00:00");
-    const end = new Date(start); end.setMonth(end.getMonth() + 6);
+    const today = new Date(todayISO() + "T00:00:00");
+    const start = new Date(today); start.setDate(start.getDate() - 28); // 4 weeks of history
+    const end = new Date(today); end.setMonth(end.getMonth() + 6);
     // Build O(1) lookup maps keyed by date string
     const eventsByDay = new Map();
     const goalsByDay  = new Map();
@@ -304,17 +305,30 @@ export default function CashCycle() {
         }
       }
     }
+    // Walk forward from start. Balance starts at totalBalance at 'today';
+    // for past days we back-calculate so imported history doesn't double-count.
+    const todayKey = dISO(today);
+    // Sum of past events (start..yesterday) to derive the "start" balance
+    const pastNet = (() => {
+      let n = 0;
+      const c = new Date(start);
+      while (c < today) {
+        for (const e of (eventsByDay.get(dISO(c)) ?? [])) n += e.amount;
+        c.setDate(c.getDate() + 1);
+      }
+      return n;
+    })();
     const map = {};
-    let bal = totalBalance;
+    let bal = totalBalance - pastNet; // balance at start of history window
     const cur = new Date(start);
-    let lowest = { value: bal, date: new Date(start) };
+    let lowest = { value: totalBalance, date: new Date(today) };
     while (cur <= end) {
       const key = dISO(cur);
       const todays    = eventsByDay.get(key) ?? [];
       const goalsToday = goalsByDay.get(key) ?? [];
       let changed = false;
       for (const e of todays) { bal += e.amount; changed = true; }
-      if (bal < lowest.value) lowest = { value: bal, date: new Date(cur) };
+      if (key >= todayKey && bal < lowest.value) lowest = { value: bal, date: new Date(cur) };
       map[key] = { balance: bal, txs: [...todays.map((e) => e.tx), ...goalsToday], changed };
       cur.setDate(cur.getDate() + 1);
     }
@@ -381,7 +395,8 @@ export default function CashCycle() {
       {view === "debts" && (
         <Debts debts={debts} addDebt={addDebt} removeDebt={removeDebt}
           accounts={accounts} setAccounts={setAccounts}
-          txns={txns} setTxns={setTxns} activeAccount={activeAccount} dm={darkMode} />
+          txns={txns} setTxns={setTxns} activeAccount={activeAccount} dm={darkMode}
+          setView={setView} />
       )}
       {view === "forecast" && (
         <ForecastView accounts={accounts} accTxns={accTxns} dayMap={dayMap}
@@ -805,7 +820,7 @@ const Calendar = React.memo(function Calendar({ dayMap, forecast, end, onTapTx, 
                       </span>
                     )}
                   </div>
-                  {info?.changed && !isPast && showProjectedBalances && <div style={S.balPill} className="cc-bal-pill">{fmtK(info.balance)}</div>}
+                  {info?.changed && showProjectedBalances && <div style={S.balPill} className="cc-bal-pill">{fmtK(info.balance)}</div>}
                   {info?.txs?.map((tx) => {
                     const t = tintFor(tx);
                     const m = catMeta(tx.category);
@@ -1378,7 +1393,7 @@ const DEBT_TABS = [
   { id: "ious", label: "IOUs", kind: "iou" },
 ];
 
-function Debts({ debts, addDebt, removeDebt, accounts, setAccounts, txns, setTxns, activeAccount, dm }) {
+function Debts({ debts, addDebt, removeDebt, accounts, setAccounts, txns, setTxns, activeAccount, dm, setView }) {
   const [tab, setTab] = useState("cards");
   const [sheet, setSheet] = useState(false);
   const [bankSheet, setBankSheet] = useState(false);
@@ -1511,6 +1526,7 @@ function Debts({ debts, addDebt, removeDebt, accounts, setAccounts, txns, setTxn
             }));
           }
           setImportSheet(false);
+          if (setView) setView("ledger");
         }} />}
     </div>
   );
@@ -3579,7 +3595,7 @@ function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onI
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadMsg, setLoadMsg] = useState("");
-  const [selAcct, setSelAcct] = useState(activeAccount);
+  const [selAcct, setSelAcct] = useState(activeAccount || accounts[0]?.id || "");
   const [selected, setSelected] = useState({});
   const [detectedBalance, setDetectedBalance] = useState(null);
   const [applyBalance, setApplyBalance] = useState(true);
@@ -3644,13 +3660,14 @@ function StatementImporter({ accounts, activeAccount, existingTxns, onClose, onI
   }
 
   function doImport() {
-    const toAdd = parsed.filter((t) => selected[t.id]).map((t) => ({ ...t, account: selAcct }));
+    const acct = selAcct || accounts[0]?.id || "";
+    const toAdd = parsed.filter((t) => selected[t.id]).map((t) => ({ ...t, account: acct }));
     let balanceUpdate = null;
     if (applyBalance && detectedBalance != null) {
-      balanceUpdate = { acctId: selAcct, balance: detectedBalance };
-    } else if (autoNetBalance && selCount > 0) {
+      balanceUpdate = { acctId: acct, balance: detectedBalance };
+    } else if (autoNetBalance && toAdd.length > 0) {
       const netDelta = toAdd.reduce((s, t) => s + (t.type === "income" ? t.amount : -t.amount), 0);
-      balanceUpdate = { acctId: selAcct, netDelta };
+      balanceUpdate = { acctId: acct, netDelta };
     }
     onImport(toAdd, balanceUpdate);
   }
